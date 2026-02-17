@@ -24,6 +24,8 @@ repos:
           - pydantic>=2.0
           - click>=8.1
           - types-python-slugify
+          - python-dotenv>=1.0
+          - "psycopg[binary]>=3.1"
         args: [--config-file=pyproject.toml]
         pass_filenames: false
         entry: mypy src/
