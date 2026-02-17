@@ -45,5 +45,3 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-# Secrets
-.secrets.baseline

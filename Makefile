@@ -32,13 +32,13 @@ test-unit:  ## Run unit tests only
 test-integration:  ## Run integration tests only
 	uv run pytest tests/integration/ -m integration
 
-migrate-up:  ## Run all migrations in schema dependency order
-	migrate -path db/migrations/public -database "$${DATABASE_URL}" up
-	migrate -path db/migrations/receipt -database "$${DATABASE_URL}" up
+migrate-up:  ## Run all migrations in schema dependency order (uses MIGRATION_DATABASE_URL)
+	migrate -path db/migrations/public -database "$${MIGRATION_DATABASE_URL}" up
+	migrate -path db/migrations/receipt -database "$${MIGRATION_DATABASE_URL}" up
 
 migrate-down:  ## Roll back the last migration for each schema (reverse order)
-	migrate -path db/migrations/receipt -database "$${DATABASE_URL}" down 1
-	migrate -path db/migrations/public -database "$${DATABASE_URL}" down 1
+	migrate -path db/migrations/receipt -database "$${MIGRATION_DATABASE_URL}" down 1
+	migrate -path db/migrations/public -database "$${MIGRATION_DATABASE_URL}" down 1
 
 docker-db-up:  ## Start PostgreSQL via Docker Compose
 	docker compose up -d

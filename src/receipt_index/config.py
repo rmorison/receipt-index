@@ -20,5 +20,9 @@ def get_database_url() -> str:
 
 
 def get_store_path() -> Path:
-    """Return the RECEIPT_STORE_PATH, defaulting to ./data/receipts."""
-    return Path(os.environ.get("RECEIPT_STORE_PATH", "./data/receipts"))
+    """Return the RECEIPT_STORE_PATH, defaulting to ./data/receipts.
+
+    Always resolves to an absolute path to avoid issues if the
+    working directory changes during execution.
+    """
+    return Path(os.environ.get("RECEIPT_STORE_PATH", "./data/receipts")).resolve()

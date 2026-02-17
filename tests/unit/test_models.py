@@ -59,6 +59,15 @@ class TestReceiptMetadata:
                 confidence=0.9,
             )
 
+    def test_empty_vendor_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="vendor"):
+            ReceiptMetadata(
+                vendor="",
+                amount=Decimal("10.00"),
+                date=date(2025, 6, 15),
+                confidence=0.9,
+            )
+
     def test_missing_vendor_rejected(self) -> None:
         with pytest.raises(ValidationError):
             ReceiptMetadata(  # type: ignore[call-arg]
@@ -66,6 +75,28 @@ class TestReceiptMetadata:
                 date=date(2025, 6, 15),
                 confidence=0.9,
             )
+
+    def test_valid_currency_codes(self) -> None:
+        for code in ("USD", "CAD", "EUR", "GBP"):
+            meta = ReceiptMetadata(
+                vendor="Test",
+                amount=Decimal("10.00"),
+                date=date(2025, 1, 1),
+                confidence=0.9,
+                currency=code,
+            )
+            assert meta.currency == code
+
+    def test_invalid_currency_rejected(self) -> None:
+        for bad in ("usd", "us", "US Dollars", "1234", ""):
+            with pytest.raises(ValidationError, match="currency"):
+                ReceiptMetadata(
+                    vendor="Test",
+                    amount=Decimal("10.00"),
+                    date=date(2025, 1, 1),
+                    confidence=0.9,
+                    currency=bad,
+                )
 
     def test_confidence_below_zero_rejected(self) -> None:
         with pytest.raises(ValidationError, match="confidence"):

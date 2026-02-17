@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime  # noqa: TC003
-from decimal import Decimal  # noqa: TC003
-from uuid import UUID  # noqa: TC003
+from datetime import date, datetime
+from decimal import Decimal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -35,9 +35,9 @@ class RawReceipt:
 class ReceiptMetadata(BaseModel):
     """Structured metadata extracted from a receipt by the LLM."""
 
-    vendor: str
+    vendor: str = Field(min_length=1)
     amount: Decimal = Field(gt=0)
-    currency: str = "USD"
+    currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
     date: date
     description: str | None = None
     confidence: float = Field(ge=0.0, le=1.0)

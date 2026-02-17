@@ -121,3 +121,15 @@ class TestLocalFileStore:
         result = store.save(date(2025, 12, 31), "Test", Decimal("1.00"), b"data")
 
         assert result.startswith("2025/12/")
+
+    def test_vendor_path_traversal_sanitized(self, store_root: Path) -> None:
+        store = LocalFileStore(store_root)
+        result = store.save(
+            date(2025, 1, 1), "../../etc/passwd", Decimal("1.00"), b"data"
+        )
+
+        assert ".." not in result
+        assert result.startswith("2025/01/")
+        # File must be inside store root
+        full_path = store.get_path(result)
+        assert str(full_path).startswith(str(store_root))

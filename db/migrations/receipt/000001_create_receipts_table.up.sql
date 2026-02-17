@@ -2,6 +2,8 @@ CREATE SCHEMA IF NOT EXISTS receipt;
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+-- uuidv7() is a built-in function in PostgreSQL 18+ (no extension required).
+-- See: https://www.postgresql.org/docs/18/functions-uuid.html
 CREATE TABLE IF NOT EXISTS receipt.receipts (
     id              UUID NOT NULL DEFAULT uuidv7(),
     source_id       TEXT NOT NULL,

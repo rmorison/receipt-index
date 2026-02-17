@@ -1,15 +1,5 @@
--- Create application roles
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'receipt_index_dev_all') THEN
-        CREATE ROLE receipt_index_dev_all;
-    END IF;
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'receipt_index_dev_write') THEN
-        CREATE ROLE receipt_index_dev_write WITH LOGIN PASSWORD 'localpass';
-    END IF;
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'receipt_index_dev_read') THEN
-        CREATE ROLE receipt_index_dev_read WITH LOGIN PASSWORD 'localpass';
-    END IF;
-END $$;
+-- Grant schema and table privileges to application roles.
+-- Roles are created by db/init/01-create-roles.sql (Docker entrypoint).
 
 -- _all: full DDL access (runs migrations)
 GRANT ALL PRIVILEGES ON SCHEMA receipt TO receipt_index_dev_all;
