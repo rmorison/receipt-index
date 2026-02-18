@@ -58,6 +58,8 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 # Pydantic models need these imports at runtime for type resolution
 "src/receipt_index/models.py" = ["TC003"]
+# pydantic-ai Agent uses Pydantic output types that need runtime imports
+"src/receipt_index/extraction.py" = ["TC003"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["receipt_index"]
@@ -70,7 +72,7 @@ warn_unused_configs = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["slugify.*", "weasyprint.*"]
+module = ["slugify.*", "weasyprint.*", "pydantic_ai.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -85,11 +87,7 @@ source = ["receipt_index"]
 omit = [
     # Stub modules — not yet implemented
     "src/receipt_index/cli.py",
-    "src/receipt_index/config.py",
     "src/receipt_index/db.py",
-    "src/receipt_index/extraction.py",
-    "src/receipt_index/renderer.py",
-    "src/receipt_index/adapters/*",
 ]
 
 [tool.coverage.report]
