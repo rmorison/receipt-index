@@ -91,3 +91,8 @@ def get_llm_model() -> str:
     Defaults to claude-haiku-4-5-20251001.
     """
     return os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
+
+
+def get_log_level() -> str:
+    """Return the log level from LOG_LEVEL env var, defaulting to INFO."""
+    return os.environ.get("LOG_LEVEL", "INFO").upper()
