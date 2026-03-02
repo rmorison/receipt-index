@@ -84,11 +84,6 @@ markers = [
 
 [tool.coverage.run]
 source = ["receipt_index"]
-omit = [
-    # Stub modules — not yet implemented
-    "src/receipt_index/cli.py",
-    "src/receipt_index/db.py",
-]
 
 [tool.coverage.report]
 fail_under = 80

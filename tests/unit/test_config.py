@@ -9,6 +9,7 @@ from receipt_index.config import (
     get_anthropic_api_key,
     get_imap_config,
     get_llm_model,
+    get_log_level,
 )
 
 
@@ -107,3 +108,24 @@ class TestGetLlmModel:
     def test_custom_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LLM_MODEL", "claude-sonnet-4-20250514")
         assert get_llm_model() == "claude-sonnet-4-20250514"
+
+
+class TestGetLogLevel:
+    """Tests for get_log_level()."""
+
+    def test_default_level(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("LOG_LEVEL", raising=False)
+        assert get_log_level() == "INFO"
+
+    def test_custom_level(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LOG_LEVEL", "debug")
+        assert get_log_level() == "DEBUG"
+
+    def test_uppercase_conversion(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LOG_LEVEL", "Warning")
+        assert get_log_level() == "WARNING"
+
+    def test_invalid_level_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LOG_LEVEL", "VERBOSE")
+        with pytest.raises(ValueError, match="Invalid LOG_LEVEL"):
+            get_log_level()
