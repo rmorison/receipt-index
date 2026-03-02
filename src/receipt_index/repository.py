@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from receipt_index.models import Receipt
 
 if TYPE_CHECKING:
-    from datetime import date
+    from datetime import date, datetime
     from decimal import Decimal
     from uuid import UUID
 
@@ -34,7 +34,7 @@ def insert_receipt(
     pdf_path: str,
     email_subject: str | None,
     email_sender: str | None,
-    email_date: object | None,
+    email_date: datetime | None,
 ) -> Receipt:
     """Insert a receipt row and return the validated Receipt model."""
     cur = conn.execute(

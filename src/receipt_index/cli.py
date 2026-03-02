@@ -98,6 +98,11 @@ def search(
     from receipt_index.db import get_connection
     from receipt_index.repository import search_receipts
 
+    if amount is not None and (amount_min is not None or amount_max is not None):
+        raise click.UsageError(
+            "--amount cannot be combined with --amount-min/--amount-max"
+        )
+
     def _to_decimal(value: str | None, name: str) -> Decimal | None:
         if value is None:
             return None
@@ -132,10 +137,11 @@ def search(
         click.echo(f"{'ID':<38} {'Date':<12} {'Vendor':<20} {'Amount':>10}")
         click.echo("-" * 82)
         for r in results:
+            vendor = r.vendor[:19] + "…" if len(r.vendor) > 20 else r.vendor
             click.echo(
                 f"{r.id!s:<38} "
                 f"{r.receipt_date.isoformat():<12} "
-                f"{r.vendor:<20} "
+                f"{vendor:<20} "
                 f"{r.amount!s:>10}"
             )
         click.echo(f"\n{len(results)} receipt(s) found.")
@@ -165,7 +171,7 @@ def show(receipt_id: str, output_format: str) -> None:
         receipt = get_receipt_by_id(conn, uid)
 
     if receipt is None:
-        click.echo(f"Receipt not found: {receipt_id}")
+        click.echo(f"Receipt not found: {receipt_id}", err=True)
         sys.exit(1)
 
     if output_format == "json":

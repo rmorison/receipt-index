@@ -200,6 +200,36 @@ class TestSearchCommand:
         assert kwargs["amount_min"] == Decimal("10")
         assert kwargs["amount_max"] == Decimal("100")
 
+    @patch("receipt_index.repository.search_receipts", return_value=[_SAMPLE_RECEIPT])
+    @patch("receipt_index.db.get_connection")
+    def test_search_date_range(
+        self,
+        mock_conn: MagicMock,
+        mock_search: MagicMock,
+    ) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["search", "--date-from", "2025-01-01", "--date-to", "2025-12-31"],
+        )
+        assert result.exit_code == 0
+        _, kwargs = mock_search.call_args
+        assert kwargs["date_from"] == date(2025, 1, 1)
+        assert kwargs["date_to"] == date(2025, 12, 31)
+
+    def test_search_invalid_amount(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["search", "--amount", "not-a-number"])
+        assert result.exit_code != 0
+
+    def test_search_amount_mutually_exclusive_with_range(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["search", "--amount", "42.99", "--amount-min", "10"]
+        )
+        assert result.exit_code != 0
+        assert "--amount cannot be combined" in result.output
+
 
 class TestShowCommand:
     """Tests for the show CLI command."""

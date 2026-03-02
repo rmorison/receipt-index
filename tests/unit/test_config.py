@@ -124,3 +124,8 @@ class TestGetLogLevel:
     def test_uppercase_conversion(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LOG_LEVEL", "Warning")
         assert get_log_level() == "WARNING"
+
+    def test_invalid_level_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("LOG_LEVEL", "VERBOSE")
+        with pytest.raises(ValueError, match="Invalid LOG_LEVEL"):
+            get_log_level()
