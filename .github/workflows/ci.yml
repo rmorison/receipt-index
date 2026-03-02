@@ -35,6 +35,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --all-extras
+      - run: uv run playwright install --with-deps chromium
       - run: uv run pytest -m "not integration" --cov-report=xml
       - uses: actions/upload-artifact@v4
         if: matrix.python-version == '3.11'

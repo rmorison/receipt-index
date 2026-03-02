@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import logging
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -232,8 +232,67 @@ class TestRenderTextToPdf:
         assert "&lt;script&gt;" in call_args
 
 
-class TestHtmlToPdfBytes:
-    """Integration tests with real weasyprint."""
+def _playwright_chromium_available() -> bool:
+    """Check whether Playwright Chromium browser is installed."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            browser.close()
+        return True
+    except Exception:
+        return False
+
+
+_skip_no_chromium = pytest.mark.skipif(
+    not _playwright_chromium_available(),
+    reason="Playwright Chromium not installed",
+)
+
+
+@_skip_no_chromium
+class TestHtmlToPdfBytesPlaywright:
+    """Integration tests with real Playwright rendering."""
+
+    @pytest.fixture(autouse=True)
+    def _set_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "playwright")
+
+    def test_produces_valid_pdf(self) -> None:
+        result = _html_to_pdf_bytes("<html><body><p>Hello</p></body></html>")
+        assert isinstance(result, bytes)
+        assert result[:5] == b"%PDF-"
+
+    def test_unicode_content(self) -> None:
+        result = _html_to_pdf_bytes(
+            "<html><body><p>Price: \u20ac42.99</p></body></html>"
+        )
+        assert isinstance(result, bytes)
+        assert result[:5] == b"%PDF-"
+
+    def test_complex_html_renders(self) -> None:
+        html = """
+        <html><body>
+        <table style="width:100%">
+          <tr><td>Item</td><td style="text-align:right">$42.99</td></tr>
+          <tr><td>Tax</td><td style="text-align:right">$3.87</td></tr>
+          <tr><td><strong>Total</strong></td>
+              <td style="text-align:right"><strong>$46.86</strong></td></tr>
+        </table>
+        </body></html>
+        """
+        result = _html_to_pdf_bytes(html)
+        assert isinstance(result, bytes)
+        assert result[:5] == b"%PDF-"
+
+
+class TestHtmlToPdfBytesWeasyprint:
+    """Integration tests with real weasyprint rendering."""
+
+    @pytest.fixture(autouse=True)
+    def _set_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "weasyprint")
 
     @pytest.fixture(autouse=True)
     def _suppress_weasyprint_warnings(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -251,3 +310,55 @@ class TestHtmlToPdfBytes:
         )
         assert isinstance(result, bytes)
         assert result[:5] == b"%PDF-"
+
+
+class TestRendererBackendSelection:
+    """Tests for PDF renderer backend selection logic."""
+
+    @patch("receipt_index.renderer._html_to_pdf_playwright")
+    def test_playwright_backend_selected(
+        self, mock_pw: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "playwright")
+        mock_pw.return_value = b"%PDF-fake"
+        result = _html_to_pdf_bytes("<p>test</p>")
+        mock_pw.assert_called_once_with("<p>test</p>")
+        assert result == b"%PDF-fake"
+
+    @patch("receipt_index.renderer._html_to_pdf_weasyprint")
+    def test_weasyprint_backend_selected(
+        self, mock_wp: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "weasyprint")
+        mock_wp.return_value = b"%PDF-fake"
+        result = _html_to_pdf_bytes("<p>test</p>")
+        mock_wp.assert_called_once_with("<p>test</p>")
+        assert result == b"%PDF-fake"
+
+    @patch("receipt_index.renderer._html_to_pdf_playwright")
+    def test_auto_uses_playwright_when_available(
+        self, mock_pw: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "auto")
+        mock_pw.return_value = b"%PDF-fake"
+        result = _html_to_pdf_bytes("<p>test</p>")
+        mock_pw.assert_called_once()
+        assert result == b"%PDF-fake"
+
+    @patch("receipt_index.renderer._html_to_pdf_weasyprint")
+    @patch(
+        "receipt_index.renderer._html_to_pdf_playwright",
+        side_effect=RuntimeError("no browser"),
+    )
+    def test_auto_falls_back_to_weasyprint(
+        self,
+        mock_pw: MagicMock,
+        mock_wp: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "auto")
+        mock_wp.return_value = b"%PDF-fallback"
+        result = _html_to_pdf_bytes("<p>test</p>")
+        mock_pw.assert_called_once()
+        mock_wp.assert_called_once()
+        assert result == b"%PDF-fallback"

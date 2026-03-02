@@ -42,7 +42,7 @@ def render_pdf(raw: RawReceipt) -> bytes:
 
     Strategy (in order of preference):
     1. If a PDF attachment exists, return it directly
-    2. If HTML body exists, render it via weasyprint
+    2. If HTML body exists, render it via configured PDF backend
     3. If text body exists, wrap in HTML template and render
     4. Render a minimal page with just the email headers
     """
@@ -112,7 +112,51 @@ def _render_text_to_pdf(raw: RawReceipt) -> bytes:
 
 
 def _html_to_pdf_bytes(html_content: str) -> bytes:
-    """Convert HTML string to PDF bytes via weasyprint."""
+    """Convert HTML string to PDF bytes via the configured backend."""
+    from receipt_index.config import get_pdf_renderer
+
+    renderer = get_pdf_renderer()
+
+    if renderer == "playwright":
+        return _html_to_pdf_playwright(html_content)
+    if renderer == "weasyprint":
+        return _html_to_pdf_weasyprint(html_content)
+
+    # "auto" mode: try Playwright first, fall back to weasyprint
+    try:
+        return _html_to_pdf_playwright(html_content)
+    except Exception:
+        logger.warning(
+            "Playwright PDF rendering failed, falling back to weasyprint",
+            exc_info=True,
+        )
+        return _html_to_pdf_weasyprint(html_content)
+
+
+def _html_to_pdf_playwright(html_content: str) -> bytes:
+    """Convert HTML string to PDF bytes via Playwright headless Chromium."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.set_content(html_content, wait_until="networkidle", timeout=30000)
+        pdf_bytes = page.pdf(
+            format="Letter",
+            print_background=True,
+            margin={
+                "top": "0.5in",
+                "bottom": "0.5in",
+                "left": "0.5in",
+                "right": "0.5in",
+            },
+        )
+        browser.close()
+    return pdf_bytes
+
+
+def _html_to_pdf_weasyprint(html_content: str) -> bytes:
+    """Convert HTML string to PDF bytes via weasyprint (legacy fallback)."""
     import weasyprint
 
     doc = weasyprint.HTML(string=html_content)

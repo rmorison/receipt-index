@@ -93,6 +93,22 @@ def get_llm_model() -> str:
     return os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
 
 
+_VALID_PDF_RENDERERS = {"playwright", "weasyprint", "auto"}
+
+
+def get_pdf_renderer() -> str:
+    """Return the PDF renderer backend from PDF_RENDERER env var.
+
+    Options: "playwright" (default), "weasyprint", "auto".
+    """
+    renderer = os.environ.get("PDF_RENDERER", "playwright").lower()
+    if renderer not in _VALID_PDF_RENDERERS:
+        valid = sorted(_VALID_PDF_RENDERERS)
+        msg = f"Invalid PDF_RENDERER: {renderer!r}. Must be one of {valid}"
+        raise ValueError(msg)
+    return renderer
+
+
 _VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 

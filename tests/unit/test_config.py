@@ -10,6 +10,7 @@ from receipt_index.config import (
     get_imap_config,
     get_llm_model,
     get_log_level,
+    get_pdf_renderer,
 )
 
 
@@ -108,6 +109,35 @@ class TestGetLlmModel:
     def test_custom_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LLM_MODEL", "claude-sonnet-4-20250514")
         assert get_llm_model() == "claude-sonnet-4-20250514"
+
+
+class TestGetPdfRenderer:
+    """Tests for get_pdf_renderer()."""
+
+    def test_default_renderer(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("PDF_RENDERER", raising=False)
+        assert get_pdf_renderer() == "playwright"
+
+    def test_playwright(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "playwright")
+        assert get_pdf_renderer() == "playwright"
+
+    def test_weasyprint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "weasyprint")
+        assert get_pdf_renderer() == "weasyprint"
+
+    def test_auto(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "auto")
+        assert get_pdf_renderer() == "auto"
+
+    def test_lowercase_conversion(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "Playwright")
+        assert get_pdf_renderer() == "playwright"
+
+    def test_invalid_renderer_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PDF_RENDERER", "wkhtmltopdf")
+        with pytest.raises(ValueError, match="Invalid PDF_RENDERER"):
+            get_pdf_renderer()
 
 
 class TestGetLogLevel:
