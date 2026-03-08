@@ -110,7 +110,7 @@ def _render_text_to_pdf(raw: RawReceipt) -> bytes:
         date=html.escape(raw.date.isoformat()),
         body=body,
     )
-    return _html_to_pdf_bytes(rendered)
+    return _html_to_pdf_weasyprint(rendered)
 
 
 def _html_to_pdf_bytes(html_content: str) -> bytes:
@@ -121,11 +121,15 @@ def _html_to_pdf_bytes(html_content: str) -> bytes:
     """
     try:
         return _html_to_pdf_playwright(html_content)
-    except Exception:
+    except ImportError:
         logger.debug(
-            "Playwright unavailable, falling back to weasyprint", exc_info=True
+            "Playwright not installed, falling back to weasyprint", exc_info=True
         )
-        return _html_to_pdf_weasyprint(html_content)
+    except Exception:
+        logger.warning(
+            "Playwright rendering failed, falling back to weasyprint", exc_info=True
+        )
+    return _html_to_pdf_weasyprint(html_content)
 
 
 def _html_to_pdf_playwright(html_content: str) -> bytes:
@@ -140,7 +144,7 @@ def _html_to_pdf_playwright(html_content: str) -> bytes:
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
-            page.set_content(html_content, wait_until="networkidle")
+            page.set_content(html_content, wait_until="domcontentloaded")
             pdf_bytes: bytes = page.pdf(format="Letter")
             return pdf_bytes
         finally:

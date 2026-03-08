@@ -14,7 +14,6 @@ from receipt_index.renderer import (
     _embed_inline_images,
     _find_pdf_attachment,
     _html_to_pdf_bytes,
-    _html_to_pdf_playwright,
     _html_to_pdf_weasyprint,
     _render_text_to_pdf,
     render_pdf,
@@ -56,7 +55,7 @@ class TestRenderPdf:
         assert result == b"pdf-from-html"
         mock_pdf.assert_called_once()
 
-    @patch("receipt_index.renderer._html_to_pdf_bytes")
+    @patch("receipt_index.renderer._html_to_pdf_weasyprint")
     def test_text_body_rendered(self, mock_pdf: pytest.fixture) -> None:
         mock_pdf.return_value = b"pdf-from-text"
         raw = RawReceipt(
@@ -69,7 +68,7 @@ class TestRenderPdf:
         result = render_pdf(raw)
         assert result == b"pdf-from-text"
 
-    @patch("receipt_index.renderer._html_to_pdf_bytes")
+    @patch("receipt_index.renderer._html_to_pdf_weasyprint")
     def test_no_body_fallback(self, mock_pdf: pytest.fixture) -> None:
         mock_pdf.return_value = b"pdf-fallback"
         raw = RawReceipt(
@@ -197,7 +196,7 @@ class TestEmbedInlineImages:
 class TestRenderTextToPdf:
     """Tests for _render_text_to_pdf."""
 
-    @patch("receipt_index.renderer._html_to_pdf_bytes")
+    @patch("receipt_index.renderer._html_to_pdf_weasyprint")
     def test_template_includes_subject_and_sender(
         self, mock_pdf: pytest.fixture
     ) -> None:
@@ -217,7 +216,7 @@ class TestRenderTextToPdf:
         assert "2025-03-15" in call_args
         assert "Total: $100" in call_args
 
-    @patch("receipt_index.renderer._html_to_pdf_bytes")
+    @patch("receipt_index.renderer._html_to_pdf_weasyprint")
     def test_html_escapes_body(self, mock_pdf: pytest.fixture) -> None:
         mock_pdf.return_value = b"pdf-bytes"
         raw = RawReceipt(
@@ -271,15 +270,6 @@ class TestHtmlToPdfBytes:
         result = _html_to_pdf_bytes("<p>test</p>")
         assert result == b"%PDF-pw"
         mock_pw.assert_called_once_with("<p>test</p>")
-
-
-class TestHtmlToPdfPlaywright:
-    """Integration test with real Playwright (requires Chromium installed)."""
-
-    def test_produces_valid_pdf(self) -> None:
-        result = _html_to_pdf_playwright("<html><body><p>Hello</p></body></html>")
-        assert isinstance(result, bytes)
-        assert result[:5] == b"%PDF-"
 
 
 class TestHtmlToPdfWeasyprint:

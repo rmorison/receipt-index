@@ -44,7 +44,7 @@ Chromium is installed locally in the project tree via `PLAYWRIGHT_BROWSERS_PATH=
 
 - **Disk footprint**: ~200MB for Chromium binary in `.playwright/`
 - **Slower rendering**: ~1-3s per page vs ~100ms with weasyprint
-- **Process overhead**: Launches a browser process per rendering call (mitigated by reusing browser instance within a pipeline run)
+- **Process overhead**: Launches a browser process per rendering call (future optimization: reuse browser instance within a pipeline run)
 
 ### Alternatives Considered
 
