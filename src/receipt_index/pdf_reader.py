@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import logging
 from typing import Any
 
+import pdfplumber
 from pydantic_ai import Agent, BinaryContent
 
 from receipt_index.config import get_anthropic_api_key, get_llm_model
@@ -74,10 +76,6 @@ def create_vision_agent() -> Agent[None, str]:
 
 def _extract_with_pdfplumber(pdf_bytes: bytes) -> str:
     """Extract text from PDF using pdfplumber."""
-    import io
-
-    import pdfplumber
-
     try:
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             pages = [page.extract_text() or "" for page in pdf.pages]

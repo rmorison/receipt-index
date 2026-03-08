@@ -6,7 +6,12 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from receipt_index.extraction import _build_prompt, _strip_html_tags, extract_metadata
+from receipt_index.extraction import (
+    _build_prompt,
+    _extract_pdf_text,
+    _strip_html_tags,
+    extract_metadata,
+)
 from receipt_index.models import Attachment, RawReceipt, ReceiptMetadata
 
 
@@ -223,3 +228,25 @@ class TestExtractMetadata:
 
         prompt = mock_agent.run_sync.call_args[0][0]
         assert "--- PDF Attachment Content ---" not in prompt
+
+
+class TestExtractPdfText:
+    """Tests for _extract_pdf_text."""
+
+    @patch("receipt_index.pdf_reader.extract_text", return_value="first pdf text")
+    def test_extracts_only_first_pdf(self, mock_extract: MagicMock) -> None:
+        attachments = [
+            Attachment(
+                filename="receipt1.pdf",
+                content_type="application/pdf",
+                data=b"%PDF-first",
+            ),
+            Attachment(
+                filename="receipt2.pdf",
+                content_type="application/pdf",
+                data=b"%PDF-second",
+            ),
+        ]
+        result = _extract_pdf_text(attachments)
+        assert result == "first pdf text"
+        mock_extract.assert_called_once_with(b"%PDF-first")
