@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import logging
 from datetime import UTC, datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -14,6 +14,8 @@ from receipt_index.renderer import (
     _embed_inline_images,
     _find_pdf_attachment,
     _html_to_pdf_bytes,
+    _html_to_pdf_playwright,
+    _html_to_pdf_weasyprint,
     _render_text_to_pdf,
     render_pdf,
 )
@@ -233,7 +235,7 @@ class TestRenderTextToPdf:
 
 
 class TestHtmlToPdfBytes:
-    """Integration tests with real weasyprint."""
+    """Tests for the _html_to_pdf_bytes dispatcher."""
 
     @pytest.fixture(autouse=True)
     def _suppress_weasyprint_warnings(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -249,5 +251,45 @@ class TestHtmlToPdfBytes:
         result = _html_to_pdf_bytes(
             "<html><body><p>Price: \u20ac42.99</p></body></html>"
         )
+        assert isinstance(result, bytes)
+        assert result[:5] == b"%PDF-"
+
+    @patch(
+        "receipt_index.renderer._html_to_pdf_playwright",
+        side_effect=RuntimeError("no chromium"),
+    )
+    @patch("receipt_index.renderer._html_to_pdf_weasyprint", return_value=b"%PDF-ws")
+    def test_falls_back_to_weasyprint(
+        self, mock_ws: MagicMock, _mock_pw: MagicMock
+    ) -> None:
+        result = _html_to_pdf_bytes("<p>test</p>")
+        assert result == b"%PDF-ws"
+        mock_ws.assert_called_once_with("<p>test</p>")
+
+    @patch("receipt_index.renderer._html_to_pdf_playwright", return_value=b"%PDF-pw")
+    def test_prefers_playwright(self, mock_pw: MagicMock) -> None:
+        result = _html_to_pdf_bytes("<p>test</p>")
+        assert result == b"%PDF-pw"
+        mock_pw.assert_called_once_with("<p>test</p>")
+
+
+class TestHtmlToPdfPlaywright:
+    """Integration test with real Playwright (requires Chromium installed)."""
+
+    def test_produces_valid_pdf(self) -> None:
+        result = _html_to_pdf_playwright("<html><body><p>Hello</p></body></html>")
+        assert isinstance(result, bytes)
+        assert result[:5] == b"%PDF-"
+
+
+class TestHtmlToPdfWeasyprint:
+    """Integration test with real weasyprint."""
+
+    @pytest.fixture(autouse=True)
+    def _suppress_weasyprint_warnings(self, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(logging.ERROR, logger="weasyprint")
+
+    def test_produces_valid_pdf(self) -> None:
+        result = _html_to_pdf_weasyprint("<html><body><p>Hello</p></body></html>")
         assert isinstance(result, bytes)
         assert result[:5] == b"%PDF-"

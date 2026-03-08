@@ -11,6 +11,7 @@ dependencies = [
     "pydantic-ai>=0.1",
     "psycopg[binary]>=3.1",
     "pdfplumber>=0.10",
+    "playwright>=1.40",
     "python-dotenv>=1.0",
     "python-slugify>=8.0",
     "weasyprint>=62.0",
@@ -75,7 +76,7 @@ warn_unused_configs = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["pdfplumber.*", "slugify.*", "weasyprint.*", "pydantic_ai.*"]
+module = ["pdfplumber.*", "playwright.*", "slugify.*", "weasyprint.*", "pydantic_ai.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
