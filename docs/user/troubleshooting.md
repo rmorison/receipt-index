@@ -77,7 +77,7 @@ Some emails (newsletters, shipping notifications without amounts) may cause the 
 Each message requires an LLM API call and PDF rendering. Use `--limit` to process in batches:
 
 ```bash
-receipt-index ingest --limit 20
+uv run receipt-index ingest --limit 20
 ```
 
 ### Missing environment variable errors
@@ -93,7 +93,7 @@ Ensure all required variables are set in `.env`. At minimum:
 
 ### `No receipts found`
 
-- Verify receipts have been ingested: `receipt-index search` (no filters)
+- Verify receipts have been ingested: `uv run receipt-index search` (no filters)
 - Check for typos in vendor names — search is case-insensitive but requires a substring match
 - Widen your date range or amount range
 
@@ -103,7 +103,7 @@ The vendor name is extracted by the LLM and may not exactly match what you expec
 
 ```bash
 # Instead of "Whole Foods Market"
-receipt-index search --vendor "whole"
+uv run receipt-index search --vendor "whole"
 ```
 
 ## PDF Output
@@ -121,7 +121,7 @@ receipt-index search --vendor "whole"
 Set `LOG_LEVEL=DEBUG` in `.env` for detailed output:
 
 ```bash
-LOG_LEVEL=DEBUG receipt-index ingest --limit 1
+LOG_LEVEL=DEBUG uv run receipt-index ingest --limit 1
 ```
 
 ### Resetting the database

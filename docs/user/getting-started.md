@@ -72,24 +72,41 @@ Set the `IMAP_FOLDER` variable in your `.env` to match the folder path. Folder n
 
 Check your email client's folder list if unsure of the exact path.
 
-## 5. First Ingest
+## 5. Running the CLI
+
+`make setup` installs the project into a uv-managed virtual environment. Run all CLI commands with `uv run`:
+
+```bash
+uv run receipt-index --help
+```
+
+If you prefer, you can activate the virtual environment first and run `receipt-index` directly:
+
+```bash
+source .venv/bin/activate
+receipt-index --help
+```
+
+All examples in this guide and the [CLI Reference](cli-reference.md) use the `uv run` form.
+
+## 6. First Ingest
 
 Preview what will be processed without making changes:
 
 ```bash
-receipt-index ingest --dry-run
+uv run receipt-index ingest --dry-run
 ```
 
 When you're satisfied, run a small batch first:
 
 ```bash
-receipt-index ingest --limit 5
+uv run receipt-index ingest --limit 5
 ```
 
 Then ingest everything:
 
 ```bash
-receipt-index ingest
+uv run receipt-index ingest
 ```
 
 You'll see output like:
@@ -102,10 +119,10 @@ Processed: 12  Skipped: 3  Failed: 0
 - **Skipped**: Messages that didn't look like receipts (low LLM confidence)
 - **Failed**: Messages that encountered errors during processing
 
-## 6. Search Your Receipts
+## 7. Search Your Receipts
 
 ```bash
-receipt-index search --vendor amazon
+uv run receipt-index search --vendor amazon
 ```
 
 See the [CLI Reference](cli-reference.md) for all search options and more examples.

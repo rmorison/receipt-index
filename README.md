@@ -44,11 +44,11 @@ make migrate-down             # Roll back last migration per schema
 See the [Getting Started](docs/user/getting-started.md) guide for setup and configuration, then the [CLI Reference](docs/user/cli-reference.md) for commands and examples.
 
 ```bash
-receipt-index ingest                          # Fetch and index new receipts
-receipt-index search --vendor amazon          # Find receipts by vendor
-receipt-index search --amount 47.99           # Find by exact amount
-receipt-index search --date-from 2026-01-01   # Find by date range
-receipt-index show <receipt-id>               # View full receipt details
+uv run receipt-index ingest                          # Fetch and index new receipts
+uv run receipt-index search --vendor amazon          # Find receipts by vendor
+uv run receipt-index search --amount 47.99           # Find by exact amount
+uv run receipt-index search --date-from 2026-01-01   # Find by date range
+uv run receipt-index show <receipt-id>               # View full receipt details
 ```
 
 ## Documentation

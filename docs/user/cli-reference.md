@@ -2,11 +2,13 @@
 
 ## Commands
 
-- [`receipt-index ingest`](#ingest) — Fetch and process receipts from email
-- [`receipt-index search`](#search) — Find receipts by metadata
-- [`receipt-index show`](#show) — View full details for a receipt
+- [`uv run receipt-index ingest`](#ingest) — Fetch and process receipts from email
+- [`uv run receipt-index search`](#search) — Find receipts by metadata
+- [`uv run receipt-index show`](#show) — View full details for a receipt
 
 All commands require a configured `.env` file (see [Getting Started](getting-started.md)).
+
+The CLI is installed into a uv-managed virtual environment by `make setup`. Run commands with `uv run receipt-index`, or activate the venv first (`source .venv/bin/activate`) and use `receipt-index` directly. Examples below use the `uv run` form.
 
 ---
 
@@ -15,7 +17,7 @@ All commands require a configured `.env` file (see [Getting Started](getting-sta
 Fetch unprocessed receipts from the configured IMAP folder, extract metadata using an LLM, render PDFs, and store everything in the database and file store.
 
 ```bash
-receipt-index ingest [OPTIONS]
+uv run receipt-index ingest [OPTIONS]
 ```
 
 ### Options
@@ -29,13 +31,13 @@ receipt-index ingest [OPTIONS]
 
 ```bash
 # Preview what will be ingested
-receipt-index ingest --dry-run
+uv run receipt-index ingest --dry-run
 
 # Ingest the next 10 unprocessed messages
-receipt-index ingest --limit 10
+uv run receipt-index ingest --limit 10
 
 # Ingest all unprocessed messages
-receipt-index ingest
+uv run receipt-index ingest
 ```
 
 ### How It Works
@@ -58,7 +60,7 @@ Re-running `ingest` is safe — previously processed messages are automatically 
 Query indexed receipts by vendor, amount, date, or any combination.
 
 ```bash
-receipt-index search [OPTIONS]
+uv run receipt-index search [OPTIONS]
 ```
 
 ### Options
@@ -79,22 +81,22 @@ Note: `--amount` cannot be combined with `--amount-min`/`--amount-max`.
 
 ```bash
 # Find all Amazon receipts
-receipt-index search --vendor amazon
+uv run receipt-index search --vendor amazon
 
 # Find receipts between $50 and $200
-receipt-index search --amount-min 50 --amount-max 200
+uv run receipt-index search --amount-min 50 --amount-max 200
 
 # Find receipts from January 2026
-receipt-index search --date-from 2026-01-01 --date-to 2026-01-31
+uv run receipt-index search --date-from 2026-01-01 --date-to 2026-01-31
 
 # Combine filters: vendor + date range
-receipt-index search --vendor "whole foods" --date-from 2026-01-01
+uv run receipt-index search --vendor "whole foods" --date-from 2026-01-01
 
 # Find an exact amount (useful for reconciliation)
-receipt-index search --amount 47.99
+uv run receipt-index search --amount 47.99
 
 # Output as JSON for scripting
-receipt-index search --vendor amazon --output json
+uv run receipt-index search --vendor amazon --output json
 ```
 
 ### Text Output
@@ -135,7 +137,7 @@ Use `--output json` for machine-readable output:
 Display full details for a specific receipt by its ID.
 
 ```bash
-receipt-index show RECEIPT_ID [OPTIONS]
+uv run receipt-index show RECEIPT_ID [OPTIONS]
 ```
 
 ### Options
@@ -148,10 +150,10 @@ receipt-index show RECEIPT_ID [OPTIONS]
 
 ```bash
 # Show receipt details
-receipt-index show 01942a3b-1234-7def-8abc-567890abcdef
+uv run receipt-index show 01942a3b-1234-7def-8abc-567890abcdef
 
 # Show as JSON
-receipt-index show 01942a3b-1234-7def-8abc-567890abcdef --output json
+uv run receipt-index show 01942a3b-1234-7def-8abc-567890abcdef --output json
 ```
 
 ### Text Output
@@ -182,15 +184,15 @@ When first setting up, ingest all existing receipts:
 
 ```bash
 # Preview first
-receipt-index ingest --dry-run
+uv run receipt-index ingest --dry-run
 
 # Ingest in batches to monitor progress
-receipt-index ingest --limit 50
-receipt-index ingest --limit 50
+uv run receipt-index ingest --limit 50
+uv run receipt-index ingest --limit 50
 # ... repeat until all processed
 
 # Or ingest everything at once
-receipt-index ingest
+uv run receipt-index ingest
 ```
 
 ### Reconciling a Transaction
@@ -199,10 +201,10 @@ You have a $47.99 charge from January 2026 and need the receipt:
 
 ```bash
 # Search by amount and date
-receipt-index search --amount 47.99 --date-from 2026-01-01 --date-to 2026-01-31
+uv run receipt-index search --amount 47.99 --date-from 2026-01-01 --date-to 2026-01-31
 
 # Get the full details including PDF location
-receipt-index show 01942a3b-1234-7def-8abc-567890abcdef
+uv run receipt-index show 01942a3b-1234-7def-8abc-567890abcdef
 ```
 
 The PDF is at `$RECEIPT_STORE_PATH/2026/01/2026-01-15__amazon__47.99.pdf`.
@@ -210,7 +212,7 @@ The PDF is at `$RECEIPT_STORE_PATH/2026/01/2026-01-15__amazon__47.99.pdf`.
 ### Finding All Receipts from a Vendor
 
 ```bash
-receipt-index search --vendor "whole foods" --date-from 2026-01-01 --date-to 2026-03-31
+uv run receipt-index search --vendor "whole foods" --date-from 2026-01-01 --date-to 2026-03-31
 ```
 
 ### Exporting Search Results
@@ -219,13 +221,13 @@ Pipe JSON output to other tools:
 
 ```bash
 # Save search results to a file
-receipt-index search --vendor amazon --output json > amazon-receipts.json
+uv run receipt-index search --vendor amazon --output json > amazon-receipts.json
 
 # Count receipts per vendor with jq
-receipt-index search --date-from 2026-01-01 --output json | jq 'group_by(.vendor) | map({vendor: .[0].vendor, count: length})'
+uv run receipt-index search --date-from 2026-01-01 --output json | jq 'group_by(.vendor) | map({vendor: .[0].vendor, count: length})'
 
 # Sum amounts with jq
-receipt-index search --vendor amazon --output json | jq '[.[].amount | tonumber] | add'
+uv run receipt-index search --vendor amazon --output json | jq '[.[].amount | tonumber] | add'
 ```
 
 ### Weekly Ingestion
@@ -233,7 +235,7 @@ receipt-index search --vendor amazon --output json | jq '[.[].amount | tonumber]
 Run periodically to pick up new receipts:
 
 ```bash
-receipt-index ingest
+uv run receipt-index ingest
 ```
 
 Previously ingested messages are skipped automatically, so this is safe to run on a schedule.
