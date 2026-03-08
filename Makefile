@@ -5,8 +5,9 @@ help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-setup:  ## Install dependencies and pre-commit hooks
+setup:  ## Install dependencies, Playwright browser, and pre-commit hooks
 	uv sync --all-extras
+	PLAYWRIGHT_BROWSERS_PATH=.playwright uv run playwright install chromium
 	uv run pre-commit install
 
 lint:  ## Run linting (ruff check)
@@ -33,12 +34,12 @@ test-integration:  ## Run integration tests only
 	uv run pytest tests/integration/ -m integration
 
 migrate-up:  ## Run all migrations in schema dependency order (uses MIGRATION_DATABASE_URL)
-	migrate -path db/migrations/public -database "$${MIGRATION_DATABASE_URL}" up
-	migrate -path db/migrations/receipt -database "$${MIGRATION_DATABASE_URL}" up
+	migrate -path db/migrations/public -database "$${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_public" up
+	migrate -path db/migrations/receipt -database "$${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_receipt" up
 
 migrate-down:  ## Roll back the last migration for each schema (reverse order)
-	migrate -path db/migrations/receipt -database "$${MIGRATION_DATABASE_URL}" down 1
-	migrate -path db/migrations/public -database "$${MIGRATION_DATABASE_URL}" down 1
+	migrate -path db/migrations/receipt -database "$${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_receipt" down 1
+	migrate -path db/migrations/public -database "$${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_public" down 1
 
 docker-db-up:  ## Start PostgreSQL via Docker Compose
 	docker compose up -d

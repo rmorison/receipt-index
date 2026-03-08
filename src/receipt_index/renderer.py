@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import html
 import logging
+import os
 import re
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from receipt_index.models import Attachment, RawReceipt
 
 logger = logging.getLogger(__name__)
+
 
 PLAIN_TEXT_TEMPLATE = """\
 <!DOCTYPE html>
@@ -42,20 +44,20 @@ def render_pdf(raw: RawReceipt) -> bytes:
 
     Strategy (in order of preference):
     1. If a PDF attachment exists, return it directly
-    2. If HTML body exists, render it via weasyprint
-    3. If text body exists, wrap in HTML template and render
-    4. Render a minimal page with just the email headers
+    2. If HTML body exists, render via Playwright (fallback: weasyprint)
+    3. If text body exists, wrap in HTML template and render via weasyprint
+    4. Render a minimal page with just the email headers via weasyprint
     """
     # 1. PDF attachment pass-through
     pdf_data = _find_pdf_attachment(raw.attachments)
     if pdf_data is not None:
         return pdf_data
 
-    # 2. HTML body rendering
+    # 2. HTML body rendering (Playwright for complex email CSS)
     if raw.html_body:
         return _render_html_to_pdf(raw.html_body, raw.attachments)
 
-    # 3. Text body rendering
+    # 3. Text body rendering (weasyprint is fine for simple templates)
     if raw.text_body:
         return _render_text_to_pdf(raw)
 
@@ -108,10 +110,48 @@ def _render_text_to_pdf(raw: RawReceipt) -> bytes:
         date=html.escape(raw.date.isoformat()),
         body=body,
     )
-    return _html_to_pdf_bytes(rendered)
+    return _html_to_pdf_weasyprint(rendered)
 
 
 def _html_to_pdf_bytes(html_content: str) -> bytes:
+    """Convert HTML string to PDF bytes.
+
+    Tries Playwright (browser-quality rendering) first, falls back to
+    weasyprint if Chromium is not installed.
+    """
+    try:
+        return _html_to_pdf_playwright(html_content)
+    except ImportError:
+        logger.debug(
+            "Playwright not installed, falling back to weasyprint", exc_info=True
+        )
+    except Exception:
+        logger.warning(
+            "Playwright rendering failed, falling back to weasyprint", exc_info=True
+        )
+    return _html_to_pdf_weasyprint(html_content)
+
+
+def _html_to_pdf_playwright(html_content: str) -> bytes:
+    """Convert HTML string to PDF bytes via Playwright headless Chromium."""
+    from playwright.sync_api import sync_playwright
+
+    # Ensure PLAYWRIGHT_BROWSERS_PATH is set for local installs
+    if "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = ".playwright"
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.set_content(html_content, wait_until="domcontentloaded")
+            pdf_bytes: bytes = page.pdf(format="Letter")
+            return pdf_bytes
+        finally:
+            browser.close()
+
+
+def _html_to_pdf_weasyprint(html_content: str) -> bytes:
     """Convert HTML string to PDF bytes via weasyprint."""
     import weasyprint
 

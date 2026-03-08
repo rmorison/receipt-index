@@ -41,7 +41,9 @@ coverage.xml
 # pytest
 .pytest_cache/
 
+# Playwright browsers
+.playwright/
+
 # OS
 .DS_Store
 Thumbs.db
-
