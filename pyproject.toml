@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-ai>=0.1",
     "psycopg[binary]>=3.1",
+    "pdfplumber>=0.10",
     "python-dotenv>=1.0",
     "python-slugify>=8.0",
     "weasyprint>=62.0",
@@ -60,6 +61,8 @@ select = [
 "src/receipt_index/models.py" = ["TC003"]
 # pydantic-ai Agent uses Pydantic output types that need runtime imports
 "src/receipt_index/extraction.py" = ["TC003"]
+# pydantic-ai BinaryContent needs runtime import for Agent usage
+"src/receipt_index/pdf_reader.py" = ["TC003"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["receipt_index"]
@@ -72,7 +75,7 @@ warn_unused_configs = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["slugify.*", "weasyprint.*", "pydantic_ai.*"]
+module = ["pdfplumber.*", "slugify.*", "weasyprint.*", "pydantic_ai.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

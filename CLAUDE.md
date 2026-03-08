@@ -24,3 +24,20 @@ Key standards applied:
 - Product spec: `docs/product/features/receipt-search-index-spec.md`
 - Technical design: `docs/engineering/designs/receipt-search-index.md`
 - ADRs: `docs/engineering/adr/`
+
+## Local Devtest Setup
+
+### Database
+```bash
+POSTGRES_HOST_PORT=15432 docker compose up -d
+```
+Migrations (requires [golang-migrate](https://github.com/golang-migrate/migrate)):
+```bash
+DB="postgresql://main:localpass@localhost:15432/receipt_index_dev?sslmode=disable"  # pragma: allowlist secret
+migrate -path db/migrations/public -database "${DB}&x-migrations-table=schema_migrations_public" up
+migrate -path db/migrations/receipt -database "${DB}&x-migrations-table=schema_migrations_receipt" up
+```
+Note: Postgres 18 requires volume mount at `/var/lib/postgresql` (not `/data` subdirectory). Separate migration tables (`schema_migrations_public`, `schema_migrations_receipt`) are needed because both migration dirs start at version 000001.
+
+### Running the CLI
+See `example.env` for required environment variables. IMAP and Anthropic credentials are stored in 1Password — see project memory for details.
