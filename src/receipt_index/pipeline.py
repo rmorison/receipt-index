@@ -82,7 +82,12 @@ def run_ingest(
             )
             result.processed += 1
             result.receipts.append(receipt)
-            logger.info("Processed receipt: %s (%s)", metadata.vendor, receipt.id)
+            logger.info(
+                "Processed receipt: %s (%s) confidence=%.2f",
+                metadata.vendor,
+                receipt.id,
+                metadata.confidence,
+            )
         except Exception:
             logger.warning("Failed to process message %s", raw.source_id, exc_info=True)
             result.failed += 1

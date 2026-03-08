@@ -28,10 +28,10 @@ test:  ## Run all tests with coverage
 	uv run pytest
 
 test-unit:  ## Run unit tests only
-	uv run pytest tests/unit/
+	uv run pytest tests/unit/ --cov-fail-under=80
 
 test-integration:  ## Run integration tests only
-	uv run pytest tests/integration/ -m integration
+	uv run pytest tests/integration/ -m integration --cov-fail-under=60
 
 migrate-up:  ## Run all migrations in schema dependency order (uses MIGRATION_DATABASE_URL)
 	migrate -path db/migrations/public -database "$${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_public" up

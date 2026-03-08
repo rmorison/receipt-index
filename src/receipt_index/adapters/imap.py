@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import imaplib
 import logging
+import time
+from datetime import UTC, datetime
 from email import message_from_bytes
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
@@ -20,6 +22,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_MAX_CONNECT_RETRIES = 3
+
 
 class ImapAdapter:
     """Fetch unprocessed receipts from an IMAP mailbox."""
@@ -29,7 +33,7 @@ class ImapAdapter:
 
     def fetch_unprocessed(self, processed_ids: set[str]) -> Iterator[RawReceipt]:
         """Connect to IMAP, fetch messages, yield those not yet processed."""
-        conn: imaplib.IMAP4_SSL | None = None
+        conn: imaplib.IMAP4 | None = None
         try:
             conn = self._connect()
             msg_ids = self._fetch_message_ids(conn)
@@ -60,13 +64,40 @@ class ImapAdapter:
                 except Exception:
                     logger.debug("Error during IMAP logout", exc_info=True)
 
-    def _connect(self) -> imaplib.IMAP4_SSL:
-        """Establish an IMAP4_SSL connection and authenticate."""
-        conn = imaplib.IMAP4_SSL(self.config.host, self.config.port)
-        conn.login(self.config.username, self.config.password)
-        return conn
+    def _connect(self) -> imaplib.IMAP4:
+        """Establish an IMAP connection and authenticate.
 
-    def _fetch_message_ids(self, conn: imaplib.IMAP4_SSL) -> list[bytes]:
+        Retries up to 3 times with exponential backoff on connection errors.
+        """
+        last_err: Exception | None = None
+        for attempt in range(_MAX_CONNECT_RETRIES):
+            try:
+                if self.config.use_ssl:
+                    conn: imaplib.IMAP4 = imaplib.IMAP4_SSL(
+                        self.config.host, self.config.port
+                    )
+                else:
+                    conn = imaplib.IMAP4(self.config.host, self.config.port)
+                conn.login(self.config.username, self.config.password)
+                return conn
+            except imaplib.IMAP4.error:
+                raise  # auth/protocol errors are not transient
+            except OSError as exc:
+                last_err = exc
+                if attempt < _MAX_CONNECT_RETRIES - 1:
+                    delay = 2**attempt
+                    logger.warning(
+                        "IMAP connection attempt %d failed, retrying in %ds: %s",
+                        attempt + 1,
+                        delay,
+                        exc,
+                    )
+                    time.sleep(delay)
+        raise ConnectionError(
+            f"Failed to connect to IMAP after {_MAX_CONNECT_RETRIES} attempts"
+        ) from last_err
+
+    def _fetch_message_ids(self, conn: imaplib.IMAP4) -> list[bytes]:
         """Select folder and return all message sequence numbers."""
         conn.select(self.config.folder, readonly=True)
         _status, data = conn.search(None, "ALL")
@@ -75,7 +106,7 @@ class ImapAdapter:
             return []
         return cast("list[bytes]", raw.split())
 
-    def _fetch_message(self, conn: imaplib.IMAP4_SSL, msg_id: bytes) -> bytes | None:
+    def _fetch_message(self, conn: imaplib.IMAP4, msg_id: bytes) -> bytes | None:
         """Fetch a single message by sequence number."""
         _status, data = conn.fetch(msg_id.decode(), "(RFC822)")
         if not data or data[0] is None:
@@ -94,8 +125,6 @@ class ImapAdapter:
         email_date = parsedate_to_datetime(date_str) if date_str else None
 
         html_body, text_body, attachments = self._extract_body_and_attachments(msg)
-
-        from datetime import UTC, datetime
 
         return RawReceipt(
             source_id=source_id,

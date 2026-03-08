@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import imaplib
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
@@ -333,6 +334,22 @@ class TestFetchUnprocessed:
         conn.login.assert_called_once_with("test@example.com", "secret")
         conn.select.assert_called_once_with("INBOX", readonly=True)
 
+    @patch("receipt_index.adapters.imap.imaplib.IMAP4")
+    def test_plain_imap_when_ssl_disabled(
+        self, mock_imap: MagicMock, imap_config: ImapConfig
+    ) -> None:
+        from dataclasses import replace
+
+        plain_config = replace(imap_config, use_ssl=False, port=143)
+        conn = self._mock_imap_connection({})
+        mock_imap.return_value = conn
+
+        adapter = ImapAdapter(plain_config)
+        list(adapter.fetch_unprocessed(set()))
+
+        mock_imap.assert_called_once_with("imap.example.com", 143)
+        conn.login.assert_called_once_with("test@example.com", "secret")
+
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_parses_email_fields(
         self, mock_ssl: MagicMock, imap_config: ImapConfig
@@ -357,3 +374,54 @@ class TestFetchUnprocessed:
         assert receipt.sender == "shop@store.com"
         assert receipt.text_body == "Total: $50.00"
         assert receipt.source_id == "<order-1@store.com>"
+
+
+class TestConnectRetry:
+    """Tests for IMAP connection retry logic."""
+
+    @patch("receipt_index.adapters.imap.time.sleep")
+    @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
+    def test_retries_on_connection_failure(
+        self, mock_ssl: MagicMock, mock_sleep: MagicMock, imap_config: ImapConfig
+    ) -> None:
+        conn = MagicMock()
+        conn.select.return_value = ("OK", [b"1"])
+        conn.search.return_value = ("OK", [b""])
+
+        # Fail twice, then succeed
+        mock_ssl.side_effect = [OSError("refused"), OSError("refused"), conn]
+
+        adapter = ImapAdapter(imap_config)
+        list(adapter.fetch_unprocessed(set()))
+
+        assert mock_ssl.call_count == 3
+        assert mock_sleep.call_count == 2
+        mock_sleep.assert_any_call(1)
+        mock_sleep.assert_any_call(2)
+
+    @patch("receipt_index.adapters.imap.time.sleep")
+    @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
+    def test_raises_after_max_retries(
+        self, mock_ssl: MagicMock, mock_sleep: MagicMock, imap_config: ImapConfig
+    ) -> None:
+        mock_ssl.side_effect = OSError("connection refused")
+
+        adapter = ImapAdapter(imap_config)
+        with pytest.raises(ConnectionError, match="Failed to connect to IMAP after 3"):
+            list(adapter.fetch_unprocessed(set()))
+
+        assert mock_ssl.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
+    def test_imap_error_not_retried(
+        self, mock_ssl: MagicMock, imap_config: ImapConfig
+    ) -> None:
+        """IMAP protocol/auth errors should propagate immediately, not retry."""
+        mock_ssl.side_effect = imaplib.IMAP4.error("auth fail")
+
+        adapter = ImapAdapter(imap_config)
+        with pytest.raises(imaplib.IMAP4.error, match="auth fail"):
+            list(adapter.fetch_unprocessed(set()))
+
+        assert mock_ssl.call_count == 1

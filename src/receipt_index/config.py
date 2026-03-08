@@ -20,6 +20,7 @@ class ImapConfig:
     password: str
     port: int = 993
     folder: str = "INBOX"
+    use_ssl: bool = True
 
 
 def get_database_url() -> str:
@@ -44,7 +45,8 @@ def get_imap_config() -> ImapConfig:
     """Build IMAP configuration from environment variables.
 
     Required: IMAP_HOST, IMAP_USERNAME, IMAP_PASSWORD
-    Optional: IMAP_PORT (default 993), IMAP_FOLDER (default INBOX)
+    Optional: IMAP_PORT (default 993), IMAP_FOLDER (default INBOX),
+              IMAP_USE_SSL (default true)
     """
     host = os.environ.get("IMAP_HOST")
     username = os.environ.get("IMAP_USERNAME")
@@ -66,6 +68,7 @@ def get_imap_config() -> ImapConfig:
     port = int(port_str)
 
     folder = os.environ.get("IMAP_FOLDER", "INBOX")
+    use_ssl = os.environ.get("IMAP_USE_SSL", "true").lower() in ("true", "1", "yes")
 
     return ImapConfig(
         host=host,  # type: ignore[arg-type]
@@ -73,6 +76,7 @@ def get_imap_config() -> ImapConfig:
         password=password,  # type: ignore[arg-type]
         port=port,
         folder=folder,
+        use_ssl=use_ssl,
     )
 
 
