@@ -84,7 +84,7 @@ def _run_migrations(conn: psycopg.Connection[dict[str, Any]]) -> None:
     )
     conn.execute("CREATE INDEX idx_receipts_amount ON receipt.receipts (amount)")
     conn.execute(
-        "CREATE INDEX idx_receipts_receipt_date" " ON receipt.receipts (receipt_date)"
+        "CREATE INDEX idx_receipts_receipt_date ON receipt.receipts (receipt_date)"
     )
     conn.execute(
         """\
