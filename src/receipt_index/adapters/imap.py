@@ -6,6 +6,7 @@ import hashlib
 import imaplib
 import logging
 import time
+from datetime import UTC, datetime
 from email import message_from_bytes
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
@@ -22,7 +23,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _MAX_CONNECT_RETRIES = 3
-_RETRY_BACKOFF_SECONDS = [1, 2, 4]
 
 
 class ImapAdapter:
@@ -85,7 +85,7 @@ class ImapAdapter:
             except OSError as exc:
                 last_err = exc
                 if attempt < _MAX_CONNECT_RETRIES - 1:
-                    delay = _RETRY_BACKOFF_SECONDS[attempt]
+                    delay = 2**attempt
                     logger.warning(
                         "IMAP connection attempt %d failed, retrying in %ds: %s",
                         attempt + 1,
@@ -125,8 +125,6 @@ class ImapAdapter:
         email_date = parsedate_to_datetime(date_str) if date_str else None
 
         html_body, text_body, attachments = self._extract_body_and_attachments(msg)
-
-        from datetime import UTC, datetime
 
         return RawReceipt(
             source_id=source_id,
