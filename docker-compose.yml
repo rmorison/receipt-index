@@ -6,9 +6,9 @@ services:
       POSTGRES_USER: main
       POSTGRES_PASSWORD: localpass
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-15432}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
       - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U main -d receipt_index_dev"]

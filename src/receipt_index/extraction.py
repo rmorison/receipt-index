@@ -9,7 +9,7 @@ from typing import Any
 from pydantic_ai import Agent
 
 from receipt_index.config import get_anthropic_api_key, get_llm_model
-from receipt_index.models import RawReceipt, ReceiptMetadata
+from receipt_index.models import Attachment, RawReceipt, ReceiptMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,10 @@ a receipt, extract the following fields:
 - description: Brief summary of what was purchased (optional)
 - confidence: Your confidence in the extraction from 0.0 to 1.0. \
 Use below 0.5 if the email may not be a receipt or key fields are uncertain.
+
+If PDF attachment content is provided below the email body, use it as additional \
+context for extraction. The PDF content often contains the detailed receipt with \
+amounts and line items that may not appear in the email body.
 
 Handle forwarded receipts by looking at the original receipt content. \
 For multi-item orders, use the total amount. If the currency is not stated, \
@@ -56,12 +60,13 @@ def extract_metadata(
     if agent is None:
         agent = create_extraction_agent()
 
-    prompt = _build_prompt(raw)
+    pdf_text = _extract_pdf_text(raw.attachments)
+    prompt = _build_prompt(raw, pdf_text=pdf_text)
     result: Any = agent.run_sync(prompt)
     return result.output  # type: ignore[no-any-return]
 
 
-def _build_prompt(raw: RawReceipt) -> str:
+def _build_prompt(raw: RawReceipt, *, pdf_text: str | None = None) -> str:
     """Build the user prompt from raw receipt data."""
     parts = [
         f"Subject: {raw.subject}",
@@ -78,7 +83,23 @@ def _build_prompt(raw: RawReceipt) -> str:
     else:
         parts.append("(no body content)")
 
+    if pdf_text:
+        parts.append("")
+        parts.append("--- PDF Attachment Content ---")
+        parts.append(pdf_text)
+
     return "\n".join(parts)
+
+
+def _extract_pdf_text(attachments: list[Attachment]) -> str | None:
+    """Extract text from the first PDF attachment, if any."""
+    from receipt_index.pdf_reader import extract_text
+
+    for att in attachments:
+        if att.content_type.lower() == "application/pdf":
+            text = extract_text(att.data)
+            return text if text else None
+    return None
 
 
 def _strip_html_tags(html: str) -> str:

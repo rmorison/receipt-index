@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from receipt_index.extraction import _build_prompt, _strip_html_tags, extract_metadata
-from receipt_index.models import RawReceipt, ReceiptMetadata
+from receipt_index.extraction import (
+    _build_prompt,
+    _extract_pdf_text,
+    _strip_html_tags,
+    extract_metadata,
+)
+from receipt_index.models import Attachment, RawReceipt, ReceiptMetadata
 
 
 class TestBuildPrompt:
@@ -59,6 +64,29 @@ class TestBuildPrompt:
         )
         prompt = _build_prompt(raw)
         assert "(no body content)" in prompt
+
+    def test_includes_pdf_text_when_provided(
+        self, sample_raw_receipt: RawReceipt
+    ) -> None:
+        prompt = _build_prompt(sample_raw_receipt, pdf_text="PDF: Total $99.00")
+        assert "--- PDF Attachment Content ---" in prompt
+        assert "PDF: Total $99.00" in prompt
+
+    def test_pdf_section_after_email_body(self, sample_raw_receipt: RawReceipt) -> None:
+        prompt = _build_prompt(sample_raw_receipt, pdf_text="PDF content here")
+        body_pos = prompt.index("--- Email Body ---")
+        pdf_pos = prompt.index("--- PDF Attachment Content ---")
+        assert pdf_pos > body_pos
+
+    def test_no_pdf_section_when_none(self, sample_raw_receipt: RawReceipt) -> None:
+        prompt = _build_prompt(sample_raw_receipt)
+        assert "--- PDF Attachment Content ---" not in prompt
+
+    def test_no_pdf_section_when_empty_string(
+        self, sample_raw_receipt: RawReceipt
+    ) -> None:
+        prompt = _build_prompt(sample_raw_receipt, pdf_text="")
+        assert "--- PDF Attachment Content ---" not in prompt
 
 
 class TestStripHtmlTags:
@@ -146,3 +174,79 @@ class TestExtractMetadata:
 
         # Agent's run_sync should have been called exactly once
         mock_agent.run_sync.assert_called_once()
+
+    @patch(
+        "receipt_index.extraction._extract_pdf_text",
+        return_value="PDF Amount: $99.00",
+    )
+    def test_includes_pdf_text_in_prompt(self, _mock_pdf_extract: MagicMock) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            subject="Receipt",
+            sender="shop@example.com",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            text_body="See attached",
+            attachments=[
+                Attachment(
+                    filename="receipt.pdf",
+                    content_type="application/pdf",
+                    data=b"%PDF",
+                ),
+            ],
+        )
+        mock_result = MagicMock()
+        mock_result.output = ReceiptMetadata(
+            vendor="Shop",
+            amount=Decimal("99.00"),
+            date=date(2025, 1, 1),
+            confidence=0.9,
+        )
+        mock_agent = MagicMock()
+        mock_agent.run_sync.return_value = mock_result
+
+        extract_metadata(raw, agent=mock_agent)
+
+        prompt = mock_agent.run_sync.call_args[0][0]
+        assert "PDF Amount: $99.00" in prompt
+        assert "--- PDF Attachment Content ---" in prompt
+
+    @patch("receipt_index.extraction._extract_pdf_text", return_value=None)
+    def test_no_pdf_section_without_attachments(
+        self, _mock_pdf_extract: MagicMock, sample_raw_receipt: RawReceipt
+    ) -> None:
+        mock_result = MagicMock()
+        mock_result.output = ReceiptMetadata(
+            vendor="Amazon",
+            amount=Decimal("42.99"),
+            date=date(2025, 6, 15),
+            confidence=0.95,
+        )
+        mock_agent = MagicMock()
+        mock_agent.run_sync.return_value = mock_result
+
+        extract_metadata(sample_raw_receipt, agent=mock_agent)
+
+        prompt = mock_agent.run_sync.call_args[0][0]
+        assert "--- PDF Attachment Content ---" not in prompt
+
+
+class TestExtractPdfText:
+    """Tests for _extract_pdf_text."""
+
+    @patch("receipt_index.pdf_reader.extract_text", return_value="first pdf text")
+    def test_extracts_only_first_pdf(self, mock_extract: MagicMock) -> None:
+        attachments = [
+            Attachment(
+                filename="receipt1.pdf",
+                content_type="application/pdf",
+                data=b"%PDF-first",
+            ),
+            Attachment(
+                filename="receipt2.pdf",
+                content_type="application/pdf",
+                data=b"%PDF-second",
+            ),
+        ]
+        result = _extract_pdf_text(attachments)
+        assert result == "first pdf text"
+        mock_extract.assert_called_once_with(b"%PDF-first")
