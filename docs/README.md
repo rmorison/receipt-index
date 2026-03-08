@@ -4,6 +4,7 @@
 
 - **[Getting Started](user/getting-started.md)** — Setup, configuration, and first ingest
 - **[CLI Reference](user/cli-reference.md)** — Commands, options, and example workflows
+- **[Production Setup](user/production-setup.md)** — Native PostgreSQL 18 instead of Docker
 - **[Troubleshooting](user/troubleshooting.md)** — Common issues and solutions
 
 ## Product

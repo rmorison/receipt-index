@@ -130,4 +130,5 @@ See the [CLI Reference](cli-reference.md) for all search options and more exampl
 ## Next Steps
 
 - [CLI Reference](cli-reference.md) — Full command documentation and example workflows
+- [Production Setup](production-setup.md) — Native PostgreSQL 18 instead of Docker
 - [Troubleshooting](troubleshooting.md) — Common issues and solutions

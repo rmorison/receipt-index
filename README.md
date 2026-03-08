@@ -57,6 +57,7 @@ See [`docs/`](docs/README.md) for:
 
 - [Getting Started](docs/user/getting-started.md) — Setup and first ingest
 - [CLI Reference](docs/user/cli-reference.md) — Commands, options, and workflows
+- [Production Setup](docs/user/production-setup.md) — Native PostgreSQL 18 instead of Docker
 - [Troubleshooting](docs/user/troubleshooting.md) — Common issues
 - [Product Specification](docs/product/features/receipt-search-index-spec.md)
 - [Technical Design](docs/engineering/designs/receipt-search-index.md)
