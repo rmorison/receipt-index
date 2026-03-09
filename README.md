@@ -39,10 +39,26 @@ make migrate-up               # Apply all migrations
 make migrate-down             # Roll back last migration per schema
 ```
 
+## Usage
+
+See the [Getting Started](docs/user/getting-started.md) guide for setup and configuration, then the [CLI Reference](docs/user/cli-reference.md) for commands and examples.
+
+```bash
+uv run receipt-index ingest                          # Fetch and index new receipts
+uv run receipt-index search --vendor amazon          # Find receipts by vendor
+uv run receipt-index search --amount 47.99           # Find by exact amount
+uv run receipt-index search --date-from 2026-01-01   # Find by date range
+uv run receipt-index show <receipt-id>               # View full receipt details
+```
+
 ## Documentation
 
 See [`docs/`](docs/README.md) for:
 
+- [Getting Started](docs/user/getting-started.md) — Setup and first ingest
+- [CLI Reference](docs/user/cli-reference.md) — Commands, options, and workflows
+- [Production Setup](docs/user/production-setup.md) — Native PostgreSQL 18 instead of Docker
+- [Troubleshooting](docs/user/troubleshooting.md) — Common issues
 - [Product Specification](docs/product/features/receipt-search-index-spec.md)
 - [Technical Design](docs/engineering/designs/receipt-search-index.md)
 - [Architecture Decision Records](docs/README.md#architecture-decision-records)
