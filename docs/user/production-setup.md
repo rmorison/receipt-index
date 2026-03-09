@@ -37,18 +37,20 @@ sudo -u postgres psql
 -- Create the database
 CREATE DATABASE receipt_index;
 
--- Create application roles
-CREATE ROLE receipt_index_write WITH LOGIN PASSWORD 'your-secure-password';  -- pragma: allowlist secret
-CREATE ROLE receipt_index_read WITH LOGIN PASSWORD 'your-secure-password';  -- pragma: allowlist secret
+-- Create application roles (names match the grant migration)
+CREATE ROLE receipt_index_dev_all WITH LOGIN PASSWORD 'your-secure-password';    -- pragma: allowlist secret
+CREATE ROLE receipt_index_dev_write WITH LOGIN PASSWORD 'your-secure-password';  -- pragma: allowlist secret
+CREATE ROLE receipt_index_dev_read WITH LOGIN PASSWORD 'your-secure-password';   -- pragma: allowlist secret
 
 -- Grant database-level connect
-GRANT CONNECT ON DATABASE receipt_index TO receipt_index_write;
-GRANT CONNECT ON DATABASE receipt_index TO receipt_index_read;
+GRANT CONNECT ON DATABASE receipt_index TO receipt_index_dev_all;
+GRANT CONNECT ON DATABASE receipt_index TO receipt_index_dev_write;
+GRANT CONNECT ON DATABASE receipt_index TO receipt_index_dev_read;
 
 \q
 ```
 
-Note: In production you don't need the `_all` role — the `postgres` superuser runs migrations directly.
+The `_dev_` suffix in the role names is just a convention from the Docker dev setup — the grant migration references these names, so we reuse them here to keep things simple.
 
 ## 3. Run Migrations
 
@@ -64,16 +66,7 @@ migrate -path db/migrations/receipt \
   -database "${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_receipt" up
 ```
 
-The migrations create the `receipt` schema, tables, indexes, and grant permissions. The grant migration (`000002_grant_receipts_access.up.sql`) references `receipt_index_dev_write` and `receipt_index_dev_read` roles — for production, either:
-
-- **Option A**: Create the dev-named roles as aliases (simplest, no migration changes):
-  ```sql
-  CREATE ROLE receipt_index_dev_write WITH LOGIN PASSWORD 'your-secure-password';  -- pragma: allowlist secret
-  CREATE ROLE receipt_index_dev_read WITH LOGIN PASSWORD 'your-secure-password';  -- pragma: allowlist secret
-  ```
-- **Option B**: Add production-specific grant migrations (cleaner long-term)
-
-Option A is recommended to get started — the role names are just labels.
+The migrations create the `receipt` schema, tables, indexes, and grant permissions to the application roles created in step 2.
 
 ## 4. Configure `.env`
 
@@ -143,5 +136,7 @@ sudo journalctl -u postgresql@18-main -f
 ```
 
 ### pg_hba.conf
+
+For same-host deployment (the typical case), no `pg_hba.conf` changes are needed — the default configuration allows local connections via peer and md5 authentication.
 
 If connecting from a different host, edit `/etc/postgresql/18/main/pg_hba.conf` to allow remote connections, and set `listen_addresses` in `postgresql.conf`. Restart after changes.

@@ -60,7 +60,7 @@ You can list available folders with any IMAP client (e.g., Thunderbird, mutt) to
 
 ### SSL/TLS errors
 
-Ensure `IMAP_USE_SSL=true` and `IMAP_PORT=993` for standard SSL connections. Some providers may use STARTTLS on port 143 instead.
+Ensure `IMAP_USE_SSL=true` and `IMAP_PORT=993` for standard SSL connections. STARTTLS is not currently supported — use SSL (port 993) or plain IMAP (`IMAP_USE_SSL=false`, port 143). Most modern providers require SSL.
 
 ## Ingest
 

@@ -52,7 +52,15 @@ Edit `.env` with your settings. The key variables:
 | `DATABASE_URL` | PostgreSQL connection string | (default works with Docker) |
 | `RECEIPT_STORE_PATH` | Where PDFs are saved | `./data/receipts` |
 
-The `DATABASE_URL`, `MIGRATION_DATABASE_URL`, `PLAYWRIGHT_BROWSERS_PATH`, and Docker port variables can generally be left at their defaults.
+Optional variables (defaults are usually fine):
+
+| Variable | Description | Default |
+|---|---|---|
+| `MIGRATION_DATABASE_URL` | Superuser URL for running migrations | (see `example.env`) |
+| `LLM_MODEL` | Anthropic model for metadata extraction | `claude-haiku-4-5-20251001` |
+| `LOG_LEVEL` | Logging verbosity | `INFO` |
+
+The `PLAYWRIGHT_BROWSERS_PATH` and Docker port variables can generally be left at their defaults.
 
 ### Email App-Specific Passwords
 

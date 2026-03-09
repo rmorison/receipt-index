@@ -53,6 +53,10 @@ uv run receipt-index ingest
 
 Re-running `ingest` is safe — previously processed messages are automatically skipped.
 
+**Exit codes**: Returns 0 on success (even if some messages are skipped), 1 if any messages fail to process. Useful for cron job monitoring.
+
+**Note on `--dry-run`**: In dry-run mode, all messages that would be processed are counted as "Skipped" in the output summary.
+
 ---
 
 ## search
@@ -76,6 +80,8 @@ uv run receipt-index search [OPTIONS]
 | `--output text\|json` | Output format (default: `text`) |
 
 Note: `--amount` cannot be combined with `--amount-min`/`--amount-max`.
+
+Results are ordered by date (newest first), then vendor name.
 
 ### Examples
 
@@ -172,7 +178,7 @@ Sender:       ship-confirm@amazon.com
 Email Date:   2026-01-15T10:30:00
 ```
 
-The `PDF` path is relative to your configured `RECEIPT_STORE_PATH`.
+The `PDF` path is relative to your configured `RECEIPT_STORE_PATH`. PDFs are stored using the naming convention `{YYYY}/{MM}/{YYYY-MM-DD}__{vendor-slug}__{amount}.pdf`.
 
 ---
 
