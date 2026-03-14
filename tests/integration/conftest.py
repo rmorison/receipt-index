@@ -31,7 +31,7 @@ _DB_DSN = (
 def _run_migrations(conn: psycopg.Connection[dict[str, Any]]) -> None:
     """Apply migrations inline so tests don't need golang-migrate.
 
-    Mirrors: public/000001, receipt/000001, receipt/000002.
+    Mirrors: public/000001, receipt/000001-000004.
     Keep in sync with db/migrations/ when schema changes.
     """
     # public/000001 — set_updated_at trigger function
@@ -94,6 +94,40 @@ def _run_migrations(conn: psycopg.Connection[dict[str, Any]]) -> None:
             EXECUTE FUNCTION public.set_updated_at()
         """
     )
+
+    # receipt/000003 — ingest_log table and indexes
+    conn.execute("DROP TABLE IF EXISTS receipt.ingest_log CASCADE")
+    conn.execute(
+        """\
+        CREATE TABLE receipt.ingest_log (
+            id              UUID NOT NULL DEFAULT uuidv7(),
+            source_id       TEXT NOT NULL,
+            source_type     TEXT NOT NULL DEFAULT 'imap',
+            status          TEXT NOT NULL,
+            receipt_id      UUID,
+            vendor          TEXT,
+            amount          NUMERIC(12,2),
+            email_subject   TEXT,
+            email_sender    TEXT,
+            email_date      TIMESTAMPTZ,
+            error_message   TEXT,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+            CONSTRAINT pk_ingest_log PRIMARY KEY (id),
+            CONSTRAINT ck_ingest_log_status
+                CHECK (status IN ('success', 'failed', 'skipped')),
+            CONSTRAINT fk_ingest_log_receipt FOREIGN KEY (receipt_id)
+                REFERENCES receipt.receipts (id) ON DELETE SET NULL
+        )
+        """
+    )
+    conn.execute("CREATE INDEX idx_ingest_log_status ON receipt.ingest_log (status)")
+    conn.execute(
+        "CREATE INDEX idx_ingest_log_source_id ON receipt.ingest_log (source_id)"
+    )
+    conn.execute(
+        "CREATE INDEX idx_ingest_log_created_at ON receipt.ingest_log (created_at)"
+    )
     conn.commit()
 
 
@@ -112,9 +146,9 @@ def pg_conn() -> Iterator[psycopg.Connection[dict[str, Any]]]:
 
 @pytest.fixture(autouse=True)
 def _truncate_receipts(pg_conn: psycopg.Connection[dict[str, Any]]) -> None:
-    """Clear the receipts table before each test."""
+    """Clear the receipts and ingest_log tables before each test."""
     pg_conn.rollback()  # clear any dangling transaction from a prior test failure
-    pg_conn.execute("TRUNCATE receipt.receipts")
+    pg_conn.execute("TRUNCATE receipt.ingest_log, receipt.receipts CASCADE")
     pg_conn.commit()
 
 
