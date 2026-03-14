@@ -61,3 +61,20 @@ class Receipt(BaseModel):
     email_date: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class IngestLogEntry(BaseModel):
+    """A record of an ingest attempt (success, failure, or skip)."""
+
+    id: UUID
+    source_id: str
+    source_type: str
+    status: str
+    receipt_id: UUID | None
+    vendor: str | None
+    amount: Decimal | None
+    email_subject: str | None
+    email_sender: str | None
+    email_date: datetime | None
+    error_message: str | None
+    created_at: datetime
