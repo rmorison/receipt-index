@@ -105,16 +105,23 @@ def run_ingest(
                 metadata.confidence,
             )
         except Exception as exc:
-            insert_ingest_log(
-                conn,
-                source_id=raw.source_id,
-                source_type="imap",
-                status="failed",
-                email_subject=raw.subject,
-                email_sender=raw.sender,
-                email_date=raw.date,
-                error_message=str(exc),
-            )
+            try:
+                insert_ingest_log(
+                    conn,
+                    source_id=raw.source_id,
+                    source_type="imap",
+                    status="failed",
+                    email_subject=raw.subject,
+                    email_sender=raw.sender,
+                    email_date=raw.date,
+                    error_message=str(exc),
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to write ingest log for %s",
+                    raw.source_id,
+                    exc_info=True,
+                )
             logger.warning(
                 "Failed to process message %s (subject=%s, sender=%s)",
                 raw.source_id,

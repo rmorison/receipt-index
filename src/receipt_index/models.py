@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -69,7 +70,7 @@ class IngestLogEntry(BaseModel):
     id: UUID
     source_id: str
     source_type: str
-    status: str
+    status: Literal["success", "failed", "skipped"]
     receipt_id: UUID | None
     vendor: str | None
     amount: Decimal | None
