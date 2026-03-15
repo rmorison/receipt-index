@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from receipt_index.models import Receipt
+from receipt_index.models import IngestLogEntry, Receipt
 
 if TYPE_CHECKING:
     from datetime import date, datetime
@@ -116,6 +116,62 @@ def search_receipts(
 
     cur = conn.execute(sql, params)
     return [Receipt.model_validate(row) for row in cur.fetchall()]
+
+
+def insert_ingest_log(
+    conn: psycopg.Connection[dict[str, Any]],
+    *,
+    source_id: str,
+    source_type: str,
+    status: str,
+    receipt_id: UUID | None = None,
+    vendor: str | None = None,
+    amount: Decimal | None = None,
+    email_subject: str | None = None,
+    email_sender: str | None = None,
+    email_date: datetime | None = None,
+    error_message: str | None = None,
+) -> IngestLogEntry:
+    """Insert an ingest log entry and return the validated model."""
+    cur = conn.execute(
+        """\
+        INSERT INTO receipt.ingest_log (
+            source_id, source_type, status, receipt_id, vendor, amount,
+            email_subject, email_sender, email_date, error_message
+        ) VALUES (
+            %(source_id)s, %(source_type)s, %(status)s, %(receipt_id)s,
+            %(vendor)s, %(amount)s, %(email_subject)s, %(email_sender)s,
+            %(email_date)s, %(error_message)s
+        )
+        RETURNING *
+        """,
+        {
+            "source_id": source_id,
+            "source_type": source_type,
+            "status": status,
+            "receipt_id": receipt_id,
+            "vendor": vendor,
+            "amount": amount,
+            "email_subject": email_subject,
+            "email_sender": email_sender,
+            "email_date": email_date,
+            "error_message": error_message,
+        },
+    )
+    row = cur.fetchone()
+    conn.commit()
+    return IngestLogEntry.model_validate(row)
+
+
+def get_ingest_failures(
+    conn: psycopg.Connection[dict[str, Any]],
+) -> list[IngestLogEntry]:
+    """Return all failed ingest log entries, newest first."""
+    cur = conn.execute(
+        "SELECT * FROM receipt.ingest_log WHERE status = 'failed' "
+        "ORDER BY created_at DESC"
+    )
+    return [IngestLogEntry.model_validate(row) for row in cur.fetchall()]
 
 
 def get_receipt_by_id(

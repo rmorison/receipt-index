@@ -75,6 +75,7 @@ def _mock_store() -> MagicMock:
 class TestRunIngest:
     """Tests for run_ingest."""
 
+    @patch("receipt_index.pipeline.insert_ingest_log")
     @patch("receipt_index.pipeline.insert_receipt", return_value=_SAMPLE_RECEIPT)
     @patch("receipt_index.pipeline.render_pdf", return_value=b"%PDF-fake")
     @patch("receipt_index.pipeline.extract_metadata", return_value=_SAMPLE_METADATA)
@@ -85,6 +86,7 @@ class TestRunIngest:
         mock_extract: MagicMock,
         mock_render: MagicMock,
         mock_insert: MagicMock,
+        mock_log: MagicMock,
     ) -> None:
         conn = _mock_conn()
         adapter = _mock_adapter([_make_raw()])
@@ -100,6 +102,9 @@ class TestRunIngest:
         mock_render.assert_called_once()
         store.save.assert_called_once()
         mock_insert.assert_called_once()
+        mock_log.assert_called_once()
+        _, kwargs = mock_log.call_args
+        assert kwargs["status"] == "success"
 
     @patch("receipt_index.pipeline.get_processed_source_ids", return_value=set())
     def test_dry_run_skips_processing(self, mock_get_ids: MagicMock) -> None:
@@ -113,6 +118,7 @@ class TestRunIngest:
         assert result.skipped == 2
         assert result.failed == 0
 
+    @patch("receipt_index.pipeline.insert_ingest_log")
     @patch("receipt_index.pipeline.insert_receipt", return_value=_SAMPLE_RECEIPT)
     @patch("receipt_index.pipeline.render_pdf", return_value=b"%PDF-fake")
     @patch("receipt_index.pipeline.extract_metadata", return_value=_SAMPLE_METADATA)
@@ -123,6 +129,7 @@ class TestRunIngest:
         mock_extract: MagicMock,
         mock_render: MagicMock,
         mock_insert: MagicMock,
+        mock_log: MagicMock,
     ) -> None:
         conn = _mock_conn()
         raws = [_make_raw(f"<msg-{i}@example.com>") for i in range(5)]
@@ -133,6 +140,7 @@ class TestRunIngest:
 
         assert result.processed == 2
 
+    @patch("receipt_index.pipeline.insert_ingest_log")
     @patch(
         "receipt_index.pipeline.extract_metadata",
         side_effect=RuntimeError("LLM error"),
@@ -142,6 +150,7 @@ class TestRunIngest:
         self,
         mock_get_ids: MagicMock,
         mock_extract: MagicMock,
+        mock_log: MagicMock,
     ) -> None:
         conn = _mock_conn()
         adapter = _mock_adapter([_make_raw(), _make_raw("<msg-2@example.com>")])
@@ -151,7 +160,12 @@ class TestRunIngest:
 
         assert result.failed == 2
         assert result.processed == 0
+        assert mock_log.call_count == 2
+        for call in mock_log.call_args_list:
+            assert call.kwargs["status"] == "failed"
+            assert "LLM error" in call.kwargs["error_message"]
 
+    @patch("receipt_index.pipeline.insert_ingest_log")
     @patch("receipt_index.pipeline.insert_receipt", return_value=_SAMPLE_RECEIPT)
     @patch("receipt_index.pipeline.render_pdf", return_value=b"%PDF-fake")
     @patch("receipt_index.pipeline.extract_metadata", return_value=_SAMPLE_METADATA)
@@ -162,6 +176,7 @@ class TestRunIngest:
         mock_extract: MagicMock,
         mock_render: MagicMock,
         mock_insert: MagicMock,
+        mock_log: MagicMock,
     ) -> None:
         conn = _mock_conn()
         adapter = _mock_adapter([_make_raw()])

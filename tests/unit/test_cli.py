@@ -12,7 +12,7 @@ from uuid import UUID
 from click.testing import CliRunner
 
 from receipt_index.cli import cli
-from receipt_index.models import Receipt
+from receipt_index.models import IngestLogEntry, Receipt
 from receipt_index.pipeline import IngestResult
 
 _RECEIPT_ROW: dict[str, Any] = {
@@ -34,6 +34,23 @@ _RECEIPT_ROW: dict[str, Any] = {
 }
 
 _SAMPLE_RECEIPT = Receipt.model_validate(_RECEIPT_ROW)
+
+_FAILURE_ROW: dict[str, Any] = {
+    "id": UUID("019572a0-0000-7000-8000-000000000099"),
+    "source_id": "<fail-1@example.com>",
+    "source_type": "imap",
+    "status": "failed",
+    "receipt_id": None,
+    "vendor": None,
+    "amount": None,
+    "email_subject": "Your shipping update",
+    "email_sender": "noreply@example.com",
+    "email_date": datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC),
+    "error_message": "amount > 0 validation failed",
+    "created_at": datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
+}
+
+_SAMPLE_FAILURE = IngestLogEntry.model_validate(_FAILURE_ROW)
 
 
 class TestIngestCommand:
@@ -229,6 +246,58 @@ class TestSearchCommand:
         )
         assert result.exit_code != 0
         assert "--amount cannot be combined" in result.output
+
+
+class TestFailuresCommand:
+    """Tests for the failures CLI command."""
+
+    @patch(
+        "receipt_index.repository.get_ingest_failures",
+        return_value=[_SAMPLE_FAILURE],
+    )
+    @patch("receipt_index.db.get_connection")
+    def test_failures_text_output(
+        self,
+        mock_conn: MagicMock,
+        mock_get: MagicMock,
+    ) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["failures"])
+        assert result.exit_code == 0
+        assert "noreply@example.com" in result.output
+        assert "Your shipping update" in result.output
+        assert "1 failed ingest(s)" in result.output
+
+    @patch(
+        "receipt_index.repository.get_ingest_failures",
+        return_value=[_SAMPLE_FAILURE],
+    )
+    @patch("receipt_index.db.get_connection")
+    def test_failures_json_output(
+        self,
+        mock_conn: MagicMock,
+        mock_get: MagicMock,
+    ) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["failures", "--output", "json"])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["status"] == "failed"
+        assert data[0]["error_message"] == "amount > 0 validation failed"
+
+    @patch("receipt_index.repository.get_ingest_failures", return_value=[])
+    @patch("receipt_index.db.get_connection")
+    def test_failures_empty(
+        self,
+        mock_conn: MagicMock,
+        mock_get: MagicMock,
+    ) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["failures"])
+        assert result.exit_code == 0
+        assert "No failed ingests" in result.output
 
 
 class TestShowCommand:

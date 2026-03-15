@@ -148,6 +148,42 @@ def search(
 
 
 @cli.command()
+@click.option(
+    "--output",
+    "output_format",
+    type=click.Choice(["text", "json"]),
+    default="text",
+    help="Output format.",
+)
+def failures(output_format: str) -> None:
+    """List failed ingest attempts."""
+    from receipt_index.db import get_connection
+    from receipt_index.repository import get_ingest_failures
+
+    with get_connection() as conn:
+        results = get_ingest_failures(conn)
+
+    if output_format == "json":
+        data = [r.model_dump(mode="json") for r in results]
+        click.echo(json.dumps(data, indent=2, default=str))
+    else:
+        if not results:
+            click.echo("No failed ingests.")
+            return
+        click.echo(f"{'Date':<22} {'Sender':<30} {'Subject':<40} {'Error':<30}")
+        click.echo("-" * 124)
+        for r in results:
+            email_date = (
+                r.email_date.strftime("%Y-%m-%d %H:%M") if r.email_date else "—"
+            )
+            sender = (r.email_sender or "—")[:29]
+            subject = (r.email_subject or "—")[:39]
+            error = (r.error_message or "—")[:29]
+            click.echo(f"{email_date:<22} {sender:<30} {subject:<40} {error:<30}")
+        click.echo(f"\n{len(results)} failed ingest(s).")
+
+
+@cli.command()
 @click.argument("receipt_id")
 @click.option(
     "--output",

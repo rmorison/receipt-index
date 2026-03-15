@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from receipt_index.extraction import extract_metadata
 from receipt_index.renderer import render_pdf
-from receipt_index.repository import get_processed_source_ids, insert_receipt
+from receipt_index.repository import (
+    get_processed_source_ids,
+    insert_ingest_log,
+    insert_receipt,
+)
 
 if TYPE_CHECKING:
     import psycopg
@@ -82,14 +86,49 @@ def run_ingest(
             )
             result.processed += 1
             result.receipts.append(receipt)
+            insert_ingest_log(
+                conn,
+                source_id=raw.source_id,
+                source_type="imap",
+                status="success",
+                receipt_id=receipt.id,
+                vendor=metadata.vendor,
+                amount=metadata.amount,
+                email_subject=raw.subject,
+                email_sender=raw.sender,
+                email_date=raw.date,
+            )
             logger.info(
                 "Processed receipt: %s (%s) confidence=%.2f",
                 metadata.vendor,
                 receipt.id,
                 metadata.confidence,
             )
-        except Exception:
-            logger.warning("Failed to process message %s", raw.source_id, exc_info=True)
+        except Exception as exc:
+            try:
+                insert_ingest_log(
+                    conn,
+                    source_id=raw.source_id,
+                    source_type="imap",
+                    status="failed",
+                    email_subject=raw.subject,
+                    email_sender=raw.sender,
+                    email_date=raw.date,
+                    error_message=str(exc),
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to write ingest log for %s",
+                    raw.source_id,
+                    exc_info=True,
+                )
+            logger.warning(
+                "Failed to process message %s (subject=%s, sender=%s)",
+                raw.source_id,
+                raw.subject,
+                raw.sender,
+                exc_info=True,
+            )
             result.failed += 1
 
     return result
