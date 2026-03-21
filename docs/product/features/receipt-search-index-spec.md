@@ -1,7 +1,7 @@
 # Receipt Search Index — Product Specification
 
-**Version:** 0.3 — Draft
-**Date:** 2026-02-16
+**Version:** 0.4 — Draft
+**Date:** 2026-03-14
 
 ---
 
@@ -17,9 +17,9 @@ During accounting reconciliation, matching bank transactions to supporting recei
 
 Ingest from a configured IMAP receipts folder. For each message: extract vendor, amount(s), and date; generate a PDF rendition; store metadata in a search index; store the PDF in a local file store.
 
-### Phase 2 — File-Based Receipts
+### Phase 2 — Google Drive Receipts & Config-Based Sources
 
-Ingest from a Google Drive folder containing scanned receipts and print-to-PDF captures. Extract metadata via OCR/AI, index and store alongside email-sourced receipts.
+Replace per-source environment variables with a unified YAML configuration file that defines named sources. Add Google Drive ingestion: ingest from configured Drive folders containing scanned receipts and print-to-PDF captures. Extract metadata via vision-capable LLM, index and store alongside email-sourced receipts. Support multiple sources of each type (e.g., two IMAP accounts, three Drive folders).
 
 ### Future
 
@@ -28,6 +28,8 @@ Ingest from a Google Drive folder containing scanned receipts and print-to-PDF c
 - Cloud storage backend (S3/GCS) behind the same file store interface
 
 ## Functional Requirements
+
+### Phase 1 (Email Receipts)
 
 | ID | Requirement |
 |----|-------------|
@@ -41,6 +43,19 @@ Ingest from a Google Drive folder containing scanned receipts and print-to-PDF c
 | FR-08 | Support idempotent ingestion — track processed messages by unique identifier (e.g., IMAP message ID) to skip already-seen items on subsequent runs |
 | FR-09 | Handle common email receipt formats: forwarded vendor confirmations, attached PDF/image receipts, inline HTML order summaries |
 
+### Phase 2 (Google Drive & Config)
+
+| ID | Requirement |
+|----|-------------|
+| FR-10 | Define all ingestion sources in a YAML configuration file with named entries; secrets remain in environment variables |
+| FR-11 | Support multiple sources of each type (e.g., two IMAP accounts, three Drive folders) |
+| FR-12 | Ingest files from configured Google Drive folders via Google Drive API |
+| FR-13 | Support PDF and image files (JPG, PNG) from Drive; convert images to PDF for storage |
+| FR-14 | Extract metadata from Drive-sourced documents using vision-capable LLM (send page images for scanned receipts) |
+| FR-15 | Track processed Drive files by Drive file ID for idempotent re-ingestion |
+| FR-16 | CLI `ingest` command accepts `--source <name>` to ingest from a specific named source, or all sources by default |
+| FR-17 | Search results include source name so users can identify which source a receipt came from |
+
 ## Non-Functional Requirements
 
 | ID | Requirement |
@@ -50,7 +65,7 @@ Ingest from a Google Drive folder containing scanned receipts and print-to-PDF c
 | NFR-03 | Docker Compose option for PostgreSQL and application |
 | NFR-04 | CLI interface for ingestion and search operations |
 | NFR-05 | File store abstraction layer to support local filesystem now, cloud storage later |
-| NFR-06 | Credentials (IMAP, database, API keys) via environment variables |
+| NFR-06 | Source configuration via YAML config file; credentials (passwords, API keys, OAuth tokens) via environment variables |
 | NFR-07 | LLM-powered extraction via Anthropic API (Haiku model for cost-effective parsing); agentic patterns via Pydantic-AI |
 | NFR-08 | Structured output support (JSON/Pydantic models) via CLI flag for agent consumption; human-friendly text by default |
 
@@ -108,11 +123,14 @@ Ingest from a Google Drive folder containing scanned receipts and print-to-PDF c
 | RD-04 | **PDF rendition:** Single human-readable PDF per receipt — rendered HTML with embedded images/attachments. Target audience is bookkeeper during reconciliation and claims adjuster during documentation review. |
 | RD-05 | **Project scope:** Standalone project. |
 | RD-06 | **Ingestion mode:** One-shot CLI command. Future expansion via workflow system (e.g., Dagster), not daemon mode. |
-| RD-07 | **Idempotency:** Track processed items by unique ID (e.g., IMAP message ID) to skip on re-runs. Duplicate receipt detection is out of scope. |
+| RD-07 | **Idempotency:** Track processed items by unique ID (e.g., IMAP message ID, Drive file ID) to skip on re-runs. Duplicate receipt detection is out of scope. |
+| RD-08 | **Config file:** YAML configuration for source definitions. Secrets stay in environment variables. Supports `${ENV_VAR}` interpolation for non-secret config values. |
+| RD-09 | **Google Drive auth:** OAuth2 with offline refresh token stored as environment variable. Service accounts require folder sharing, which is less natural for personal Drive usage. |
+| RD-10 | **Drive file handling:** PDFs copied directly to file store. Images (JPG, PNG) converted to PDF via Pillow. Google Docs exported as PDF via Drive API. |
 
 ## Open Questions
 
-None — all questions resolved during technical design.
+None for Phase 1 — all questions resolved during technical design. Phase 2 questions are tracked in the [Phase 2 technical design](../../engineering/designs/phase-2-gdrive-and-config.md).
 
 | ID | Resolution |
 |----|------------|
