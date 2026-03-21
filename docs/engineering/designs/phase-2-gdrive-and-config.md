@@ -131,7 +131,7 @@ class LlmConfig(BaseModel):
     api_key: str
 
 class LoggingConfig(BaseModel):
-    level: str = "INFO"
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 class AppConfig(BaseModel):
     sources: list[ImapSourceConfig | GdriveSourceConfig]
@@ -160,7 +160,7 @@ def _interpolate_env(value: str) -> str:
     return _ENV_PATTERN.sub(_replace, value)
 ```
 
-Walk the parsed YAML dict and apply `_interpolate_env` to all string values before passing to Pydantic.
+Walk the parsed YAML dict and apply `_interpolate_env` to all string values before passing to Pydantic. Collect all missing env var errors and report them together so users can fix all missing variables in one pass rather than one error per run.
 
 #### No Backward Compatibility
 
@@ -190,6 +190,17 @@ class RawReceipt:
 ```
 
 The IMAP adapter continues populating `subject`, `sender`, `html_body`, `text_body`, and `attachments`. The Drive adapter populates `file_name`, `file_content`, and `file_content_type`.
+
+#### Receipt Model Changes
+
+Update the `Receipt` Pydantic model to include the new DB columns. Since `insert_receipt` uses `RETURNING *` → `Receipt.model_validate(row)`, the model must match the schema:
+
+```python
+class Receipt(BaseModel):
+    # ... existing fields ...
+    source_name: str                       # NEW: NOT NULL after migration backfill
+    file_name: str | None = None          # NEW: original filename (Drive)
+```
 
 #### Pipeline Changes
 
@@ -268,6 +279,9 @@ ALTER TABLE receipt.receipts
 -- Backfill existing rows with a placeholder name (not a source type)
 UPDATE receipt.receipts SET source_name = 'legacy-imap' WHERE source_name IS NULL;
 
+-- Now enforce NOT NULL — all rows have a value
+ALTER TABLE receipt.receipts ALTER COLUMN source_name SET NOT NULL;
+
 -- Grant write access to new columns
 GRANT INSERT (source_name, file_name)
     ON receipt.receipts TO receipt_index_dev_write;
@@ -327,6 +341,40 @@ def get_processed_source_ids(
     else:
         cur = conn.execute("SELECT source_id FROM receipt.receipts")
     return {str(row["source_id"]) for row in cur.fetchall()}
+```
+
+Update `search_receipts()` with an optional `source_name` filter (required for FR-17 and `--source` CLI flag):
+
+```python
+def search_receipts(
+    conn: ...,
+    *,
+    vendor: str | None = None,
+    amount: Decimal | None = None,
+    amount_min: Decimal | None = None,
+    amount_max: Decimal | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    source_name: str | None = None,   # NEW
+) -> list[Receipt]:
+```
+
+When `source_name` is provided, add `WHERE source_name = %(source_name)s` to the query.
+
+Update `insert_receipt()` call in the pipeline to set `email_date` correctly per source type — Drive receipts have no email date:
+
+```python
+receipt = insert_receipt(
+    conn,
+    source_id=raw.source_id,
+    source_type=raw.source_type,
+    source_name=raw.source_name,
+    # ...
+    email_subject=raw.subject or None,
+    email_sender=raw.sender or None,
+    email_date=raw.date if raw.source_type == "imap" else None,
+    file_name=raw.file_name,
+)
 ```
 
 ### 3. Google Drive Adapter
@@ -483,20 +531,21 @@ If PDF text extraction yields insufficient content (<20 non-whitespace chars, ma
 
 ## Implementation Plan
 
-### Phase 2a: Config System (8 points)
+### Phase 2a: Config System (9 points)
 
 | Task | Points | Dependencies |
 |------|--------|--------------|
 | Config data model (Pydantic models, YAML loading, env var interpolation) | 3 | None |
-| Config file discovery and loading with fallback to env vars | 2 | Config data model |
+| Config file discovery and loading | 2 | Config data model |
 | Update CLI to use config system (`--config`, `--source` flags) | 3 | Config loading |
+| Migration guide for existing env var users + example config file | 1 | Config loading |
 
 ### Phase 2b: Model & Pipeline Generalization (5 points)
 
 | Task | Points | Dependencies |
 |------|--------|--------------|
 | Generalize `RawReceipt` and update IMAP adapter | 2 | None |
-| Update pipeline to accept `source_name`/`source_type`, multi-source orchestration | 2 | Generalized models |
+| Update pipeline and repository for source-aware operation, multi-source orchestration | 2 | Generalized models |
 | DB migration: add `source_name`, `file_name` columns (up + down) | 1 | None |
 
 ### Phase 2c: Google Drive Adapter (10 points)
@@ -514,7 +563,7 @@ If PDF text extraction yields insufficient content (<20 non-whitespace chars, ma
 | Document extraction path (vision + text-based) in `extraction.py` | 5 | Drive adapter |
 | Integration testing (mock Drive API + Postgres) | 3 | All components |
 
-**Total: 31 story points**
+**Total: 32 story points**
 
 ### Critical Path
 
