@@ -117,7 +117,7 @@ class ImapSourceConfig(SourceConfig):
 class GdriveSourceConfig(SourceConfig):
     type: Literal["gdrive"] = "gdrive"
     folder_id: str
-    credentials_json: str    # OAuth client credentials JSON (or path)
+    credentials_json: str    # OAuth client credentials JSON blob (content of client_secret.json)
     token_json: str          # OAuth token JSON with refresh token
 
 class DatabaseConfig(BaseModel):
@@ -160,7 +160,7 @@ def _interpolate_env(value: str) -> str:
     return _ENV_PATTERN.sub(_replace, value)
 ```
 
-Walk the parsed YAML dict and apply `_interpolate_env` to all string values before passing to Pydantic. Collect all missing env var errors and report them together so users can fix all missing variables in one pass rather than one error per run.
+Walk the parsed YAML dict and apply `_interpolate_env` to all string values before passing to Pydantic. The implementation should collect all missing env var names across the entire config and raise a single error listing them all, so users can fix everything in one pass rather than one error per run.
 
 #### No Backward Compatibility
 
@@ -589,7 +589,7 @@ Config data model and model generalization can proceed in parallel. Drive adapte
 
 | Component | Test Focus |
 |-----------|------------|
-| Config loading | YAML parsing, env var interpolation, validation, fallback to env vars |
+| Config loading | YAML parsing, env var interpolation, Pydantic validation, clear error on missing config file |
 | Config models | Pydantic validation for all source types, edge cases |
 | `GdriveAdapter` | Mock Drive API responses, file type handling, date parsing |
 | Document extraction | Mock LLM responses, vision vs. text routing, prompt construction |
