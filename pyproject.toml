@@ -85,6 +85,10 @@ mypy_path = "src"
 module = ["google.auth.*", "google.oauth2.*", "google_auth_oauthlib.*", "googleapiclient.*", "pdfplumber.*", "PIL.*", "playwright.*", "slugify.*", "weasyprint.*", "pydantic_ai.*", "yaml.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["receipt_index.adapters.gdrive"]
+disallow_untyped_calls = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=receipt_index --cov-report=term-missing --cov-report=html"

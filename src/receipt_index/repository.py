@@ -151,17 +151,26 @@ def insert_ingest_log(
     email_sender: str | None = None,
     email_date: datetime | None = None,
     error_message: str | None = None,
+    llm_input_tokens: int | None = None,
+    llm_output_tokens: int | None = None,
+    llm_cache_read_tokens: int | None = None,
+    llm_requests: int | None = None,
+    llm_model: str | None = None,
 ) -> IngestLogEntry:
     """Insert an ingest log entry and return the validated model."""
     cur = conn.execute(
         """\
         INSERT INTO receipt.ingest_log (
             source_id, source_type, status, receipt_id, vendor, amount,
-            email_subject, email_sender, email_date, error_message
+            email_subject, email_sender, email_date, error_message,
+            llm_input_tokens, llm_output_tokens, llm_cache_read_tokens,
+            llm_requests, llm_model
         ) VALUES (
             %(source_id)s, %(source_type)s, %(status)s, %(receipt_id)s,
             %(vendor)s, %(amount)s, %(email_subject)s, %(email_sender)s,
-            %(email_date)s, %(error_message)s
+            %(email_date)s, %(error_message)s,
+            %(llm_input_tokens)s, %(llm_output_tokens)s, %(llm_cache_read_tokens)s,
+            %(llm_requests)s, %(llm_model)s
         )
         RETURNING *
         """,
@@ -176,6 +185,11 @@ def insert_ingest_log(
             "email_sender": email_sender,
             "email_date": email_date,
             "error_message": error_message,
+            "llm_input_tokens": llm_input_tokens,
+            "llm_output_tokens": llm_output_tokens,
+            "llm_cache_read_tokens": llm_cache_read_tokens,
+            "llm_requests": llm_requests,
+            "llm_model": llm_model,
         },
     )
     row = cur.fetchone()

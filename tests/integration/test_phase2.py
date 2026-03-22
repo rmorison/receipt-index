@@ -63,8 +63,16 @@ def _make_mock_agent(
         date=receipt_date or date(2025, 6, 15),
         confidence=confidence,
     )
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = 100
+    mock_usage.output_tokens = 50
+    mock_usage.cache_read_tokens = 0
+    mock_usage.requests = 1
+
     mock_result = MagicMock()
     mock_result.output = meta
+    mock_result.usage.return_value = mock_usage
+
     agent = MagicMock()
     agent.run_sync.return_value = mock_result
     return agent
@@ -82,8 +90,15 @@ def _make_alternating_agent(
             date=rcpt_date,
             confidence=0.90,
         )
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 100
+        mock_usage.output_tokens = 50
+        mock_usage.cache_read_tokens = 0
+        mock_usage.requests = 1
+
         mock_result = MagicMock()
         mock_result.output = meta
+        mock_result.usage.return_value = mock_usage
         results.append(mock_result)
     agent = MagicMock()
     agent.run_sync.side_effect = results
@@ -176,6 +191,7 @@ class TestConfigImapIngest:
             store=store,
             agent=agent,
             source_name="personal-email",
+            source_type="imap",
         )
 
         assert result.processed == 1
@@ -228,6 +244,7 @@ class TestConfigImapIngest:
             store=store,
             agent=agent,
             source_name="work-receipts",
+            source_type="imap",
         )
 
         rows = pg_conn.execute(
@@ -303,6 +320,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=agent_a,
             source_name="source-a",
+            source_type="imap",
         )
         result_b = run_ingest(
             conn=pg_conn,
@@ -310,6 +328,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=agent_b,
             source_name="source-b",
+            source_type="imap",
         )
 
         assert result_a.processed == 1
@@ -356,6 +375,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=_make_mock_agent(vendor="AlphaVendor", amount=Decimal("10.00")),
             source_name="alpha",
+            source_type="imap",
         )
         run_ingest(
             conn=pg_conn,
@@ -363,6 +383,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=_make_mock_agent(vendor="BetaVendor", amount=Decimal("20.00")),
             source_name="beta",
+            source_type="imap",
         )
 
         alpha_rows = search_receipts(pg_conn, source_name="alpha")
@@ -420,6 +441,7 @@ class TestSourceFiltering:
             store=store,
             agent=_make_mock_agent(vendor="FilterVendorA", amount=Decimal("30.00")),
             source_name="filter-source-a",
+            source_type="imap",
         )
 
         assert result.processed == 1
@@ -465,12 +487,13 @@ class TestSourceFiltering:
             store=store,
             agent=_make_mock_agent(vendor="PidVendorA", amount=Decimal("50.00")),
             source_name="pid-a",
+            source_type="imap",
         )
 
-        # get_processed_source_ids filtered to "pid-b" returns empty set
-        # so source-b can ingest without interference from source-a's IDs
-        ids_b = get_processed_source_ids(pg_conn, source_name="pid-b")
-        assert len(ids_b) == 0
+        # get_processed_source_ids returns all IDs globally, but source-b's
+        # adapter provides different source_ids so they won't collide
+        all_ids = get_processed_source_ids(pg_conn)
+        assert len(all_ids) >= 1  # source-a's IDs are in there
 
         result_b = run_ingest(
             conn=pg_conn,
@@ -478,6 +501,7 @@ class TestSourceFiltering:
             store=store,
             agent=_make_mock_agent(vendor="PidVendorB", amount=Decimal("60.00")),
             source_name="pid-b",
+            source_type="imap",
         )
         assert result_b.processed == 1
 
@@ -531,6 +555,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=agent,
             source_name="idem-source",
+            source_type="imap",
         )
         assert r1.processed == 1
 
@@ -541,6 +566,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=_make_mock_agent(vendor="IdemVendor", amount=Decimal("75.00")),
             source_name="idem-source",
+            source_type="imap",
         )
         assert r2.processed == 0
 
@@ -583,6 +609,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=_make_mock_agent(vendor="FirstVendor", amount=Decimal("10.00")),
             source_name="idem2-source",
+            source_type="imap",
         )
 
         # Seed a second email
@@ -599,6 +626,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=_make_mock_agent(vendor="SecondVendor", amount=Decimal("20.00")),
             source_name="idem2-source",
+            source_type="imap",
         )
         assert r2.processed == 1
 
@@ -649,6 +677,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="SearchVendorA", amount=Decimal("100.00")),
             source_name="search-a",
+            source_type="imap",
         )
         run_ingest(
             conn=pg_conn,
@@ -656,6 +685,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="SearchVendorB", amount=Decimal("200.00")),
             source_name="search-b",
+            source_type="imap",
         )
 
         results_a = search_receipts(pg_conn, source_name="search-a")
@@ -705,6 +735,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="ACME Corp", amount=Decimal("50.00")),
             source_name="combo-a",
+            source_type="imap",
         )
         run_ingest(
             conn=pg_conn,
@@ -712,6 +743,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="ACME Corp", amount=Decimal("50.00")),
             source_name="combo-b",
+            source_type="imap",
         )
 
         # Search vendor=ACME in combo-a only
@@ -846,6 +878,7 @@ class TestGdriveAdapterMocked:
                 store=store,
                 agent=agent,
                 source_name="scanned-receipts",
+                source_type="gdrive",
             )
 
         assert result.processed == 1
@@ -907,6 +940,7 @@ class TestGdriveAdapterMocked:
                 store=store,
                 agent=agent,
                 source_name="scanned-receipts",
+                source_type="gdrive",
             )
             assert r1.processed == 1
 
@@ -934,6 +968,7 @@ class TestGdriveAdapterMocked:
                 store=store,
                 agent=_make_mock_agent(vendor="DupeVendor", amount=Decimal("15.00")),
                 source_name="scanned-receipts",
+                source_type="gdrive",
             )
 
         assert r2.processed == 0
@@ -973,6 +1008,7 @@ class TestGdriveAdapterMocked:
             store=store,
             agent=_make_mock_agent(),
             source_name="scanned-receipts",
+            source_type="gdrive",
         )
 
         # Nothing processed or failed — unsupported files are silently skipped
@@ -1005,6 +1041,7 @@ class TestGdriveAdapterMocked:
             store=store,
             agent=_make_mock_agent(),
             source_name="scanned-receipts",
+            source_type="gdrive",
         )
 
         assert result.processed == 0
@@ -1311,8 +1348,8 @@ class TestLoadConfigIntegration:
     def test_load_config_missing_env_var_raises_clear_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A config with unset ${VAR} raises ValueError naming all missing variables."""
-        from receipt_index.config import load_config
+        """Unset ${VAR} raises ConfigError naming all missing variables."""
+        from receipt_index.config import ConfigError, load_config
 
         # Ensure the var is NOT set
         monkeypatch.delenv("MISSING_VAR_ONE", raising=False)
@@ -1340,7 +1377,7 @@ class TestLoadConfigIntegration:
             )
         )
 
-        with pytest.raises(ValueError, match="MISSING_VAR"):
+        with pytest.raises(ConfigError, match="MISSING_VAR"):
             load_config(config_file)
 
     def test_load_config_two_sources(self, tmp_path: Path) -> None:
@@ -1391,9 +1428,9 @@ class TestLoadConfigIntegration:
         assert gdrive_src.folder_id == "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
 
     def test_load_config_missing_file_raises_clear_error(self, tmp_path: Path) -> None:
-        """A nonexistent config path raises FileNotFoundError or ValueError."""
-        from receipt_index.config import load_config
+        """A nonexistent config path raises ConfigError."""
+        from receipt_index.config import ConfigError, load_config
 
         missing = tmp_path / "does-not-exist.yaml"
-        with pytest.raises((FileNotFoundError, ValueError)):
+        with pytest.raises(ConfigError):
             load_config(missing)

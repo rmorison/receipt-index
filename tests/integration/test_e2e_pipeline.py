@@ -42,8 +42,16 @@ def _make_mock_agent(
         date=receipt_date or date(2025, 6, 15),
         confidence=confidence,
     )
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = 100
+    mock_usage.output_tokens = 50
+    mock_usage.cache_read_tokens = 0
+    mock_usage.requests = 1
+
     mock_result = MagicMock()
     mock_result.output = meta
+    mock_result.usage.return_value = mock_usage
+
     agent = MagicMock()
     agent.run_sync.return_value = mock_result
     return agent
@@ -96,6 +104,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 
@@ -141,6 +150,7 @@ class TestFullPipelineE2E:
             adapter=ImapAdapter(config),
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
         assert r1.processed == 1
@@ -151,6 +161,7 @@ class TestFullPipelineE2E:
             adapter=ImapAdapter(config),
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
         assert r2.processed == 0
@@ -183,6 +194,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=_make_mock_agent(),
             dry_run=True,
         )
@@ -219,6 +231,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 
@@ -251,6 +264,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
             limit=2,
         )
@@ -288,6 +302,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 
@@ -333,16 +348,27 @@ class TestFullPipelineE2E:
             date=date(2025, 3, 2),
             confidence=0.85,
         )
+
+        def _mock_result(meta: ReceiptMetadata) -> MagicMock:
+            usage = MagicMock()
+            usage.input_tokens = 100
+            usage.output_tokens = 50
+            usage.cache_read_tokens = 0
+            usage.requests = 1
+            r = MagicMock()
+            r.output = meta
+            r.usage.return_value = usage
+            return r
+
         agent = MagicMock()
-        r1, r2 = MagicMock(), MagicMock()
-        r1.output, r2.output = meta1, meta2
-        agent.run_sync.side_effect = [r1, r2]
+        agent.run_sync.side_effect = [_mock_result(meta1), _mock_result(meta2)]
 
         run_ingest(
             conn=pg_conn,
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 

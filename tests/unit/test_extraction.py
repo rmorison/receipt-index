@@ -19,6 +19,20 @@ from receipt_index.extraction import (
 from receipt_index.models import Attachment, RawReceipt, ReceiptMetadata
 
 
+def _mock_agent_result(metadata: ReceiptMetadata) -> MagicMock:
+    """Create a mock agent run result with usage info."""
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = 100
+    mock_usage.output_tokens = 50
+    mock_usage.cache_read_tokens = 0
+    mock_usage.requests = 1
+
+    mock_result = MagicMock()
+    mock_result.output = metadata
+    mock_result.usage.return_value = mock_usage
+    return mock_result
+
+
 class TestBuildPrompt:
     """Tests for _build_prompt."""
 
@@ -137,25 +151,26 @@ class TestExtractMetadata:
             confidence=0.95,
         )
 
-        mock_result = MagicMock()
-        mock_result.output = expected
-
+        mock_result = _mock_agent_result(expected)
         mock_agent = MagicMock()
         mock_agent.run_sync.return_value = mock_result
 
         result = extract_metadata(sample_raw_receipt, agent=mock_agent)
 
-        assert result == expected
-        assert result.vendor == "Amazon"
-        assert result.amount == Decimal("42.99")
+        assert result.metadata == expected
+        assert result.metadata.vendor == "Amazon"
+        assert result.metadata.amount == Decimal("42.99")
+        assert result.input_tokens == 100
+        assert result.output_tokens == 50
 
     def test_passes_prompt_to_agent(self, sample_raw_receipt: RawReceipt) -> None:
-        mock_result = MagicMock()
-        mock_result.output = ReceiptMetadata(
-            vendor="Amazon",
-            amount=Decimal("42.99"),
-            date=date(2025, 6, 15),
-            confidence=0.95,
+        mock_result = _mock_agent_result(
+            ReceiptMetadata(
+                vendor="Amazon",
+                amount=Decimal("42.99"),
+                date=date(2025, 6, 15),
+                confidence=0.95,
+            )
         )
 
         mock_agent = MagicMock()
@@ -169,12 +184,13 @@ class TestExtractMetadata:
         assert "Order Total: $42.99" in prompt
 
     def test_uses_injected_agent(self, sample_raw_receipt: RawReceipt) -> None:
-        mock_result = MagicMock()
-        mock_result.output = ReceiptMetadata(
-            vendor="Test",
-            amount=Decimal("1.00"),
-            date=date(2025, 1, 1),
-            confidence=0.5,
+        mock_result = _mock_agent_result(
+            ReceiptMetadata(
+                vendor="Test",
+                amount=Decimal("1.00"),
+                date=date(2025, 1, 1),
+                confidence=0.5,
+            )
         )
 
         mock_agent = MagicMock()
@@ -206,12 +222,13 @@ class TestExtractMetadata:
                 ),
             ],
         )
-        mock_result = MagicMock()
-        mock_result.output = ReceiptMetadata(
-            vendor="Shop",
-            amount=Decimal("99.00"),
-            date=date(2025, 1, 1),
-            confidence=0.9,
+        mock_result = _mock_agent_result(
+            ReceiptMetadata(
+                vendor="Shop",
+                amount=Decimal("99.00"),
+                date=date(2025, 1, 1),
+                confidence=0.9,
+            )
         )
         mock_agent = MagicMock()
         mock_agent.run_sync.return_value = mock_result
@@ -226,12 +243,13 @@ class TestExtractMetadata:
     def test_no_pdf_section_without_attachments(
         self, _mock_pdf_extract: MagicMock, sample_raw_receipt: RawReceipt
     ) -> None:
-        mock_result = MagicMock()
-        mock_result.output = ReceiptMetadata(
-            vendor="Amazon",
-            amount=Decimal("42.99"),
-            date=date(2025, 6, 15),
-            confidence=0.95,
+        mock_result = _mock_agent_result(
+            ReceiptMetadata(
+                vendor="Amazon",
+                amount=Decimal("42.99"),
+                date=date(2025, 6, 15),
+                confidence=0.95,
+            )
         )
         mock_agent = MagicMock()
         mock_agent.run_sync.return_value = mock_result
@@ -285,12 +303,13 @@ class TestExtractMetadataRouting:
     """Tests for source_type routing in extract_metadata."""
 
     def _mock_agent(self) -> MagicMock:
-        mock_result = MagicMock()
-        mock_result.output = ReceiptMetadata(
-            vendor="TestVendor",
-            amount=Decimal("10.00"),
-            date=date(2025, 1, 1),
-            confidence=0.9,
+        mock_result = _mock_agent_result(
+            ReceiptMetadata(
+                vendor="TestVendor",
+                amount=Decimal("10.00"),
+                date=date(2025, 1, 1),
+                confidence=0.9,
+            )
         )
         agent = MagicMock()
         agent.run_sync.return_value = mock_result
@@ -309,7 +328,7 @@ class TestExtractMetadataRouting:
         agent = self._mock_agent()
         result = extract_metadata(raw, agent=agent)
 
-        assert result.vendor == "TestVendor"
+        assert result.metadata.vendor == "TestVendor"
         # Email path sends a string prompt, not a list
         prompt = agent.run_sync.call_args[0][0]
         assert isinstance(prompt, str)
@@ -331,7 +350,7 @@ class TestExtractMetadataRouting:
         agent = self._mock_agent()
         result = extract_metadata(raw, agent=agent)
 
-        assert result.vendor == "TestVendor"
+        assert result.metadata.vendor == "TestVendor"
         # PDF with sufficient text sends a text prompt
         prompt = agent.run_sync.call_args[0][0]
         assert isinstance(prompt, str)
@@ -342,12 +361,13 @@ class TestExtractFromDocument:
     """Tests for _extract_from_document."""
 
     def _mock_agent(self) -> MagicMock:
-        mock_result = MagicMock()
-        mock_result.output = ReceiptMetadata(
-            vendor="Store",
-            amount=Decimal("15.00"),
-            date=date(2025, 3, 1),
-            confidence=0.85,
+        mock_result = _mock_agent_result(
+            ReceiptMetadata(
+                vendor="Store",
+                amount=Decimal("15.00"),
+                date=date(2025, 3, 1),
+                confidence=0.85,
+            )
         )
         agent = MagicMock()
         agent.run_sync.return_value = mock_result

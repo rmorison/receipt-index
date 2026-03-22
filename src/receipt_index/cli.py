@@ -136,6 +136,7 @@ def ingest(
                 source_name=source_config.name,
                 source_type=source_config.type,
                 agent=agent,
+                llm_model=config.llm.model,
                 dry_run=dry_run,
                 limit=limit,
             )
