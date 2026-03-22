@@ -96,6 +96,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 
@@ -141,6 +142,7 @@ class TestFullPipelineE2E:
             adapter=ImapAdapter(config),
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
         assert r1.processed == 1
@@ -151,6 +153,7 @@ class TestFullPipelineE2E:
             adapter=ImapAdapter(config),
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
         assert r2.processed == 0
@@ -183,6 +186,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=_make_mock_agent(),
             dry_run=True,
         )
@@ -219,6 +223,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 
@@ -251,6 +256,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
             limit=2,
         )
@@ -288,6 +294,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 
@@ -343,6 +350,7 @@ class TestFullPipelineE2E:
             adapter=adapter,
             store=store,
             source_name="greenmail-test",
+            source_type="imap",
             agent=agent,
         )
 

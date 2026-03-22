@@ -176,6 +176,7 @@ class TestConfigImapIngest:
             store=store,
             agent=agent,
             source_name="personal-email",
+            source_type="imap",
         )
 
         assert result.processed == 1
@@ -228,6 +229,7 @@ class TestConfigImapIngest:
             store=store,
             agent=agent,
             source_name="work-receipts",
+            source_type="imap",
         )
 
         rows = pg_conn.execute(
@@ -303,6 +305,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=agent_a,
             source_name="source-a",
+            source_type="imap",
         )
         result_b = run_ingest(
             conn=pg_conn,
@@ -310,6 +313,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=agent_b,
             source_name="source-b",
+            source_type="imap",
         )
 
         assert result_a.processed == 1
@@ -356,6 +360,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=_make_mock_agent(vendor="AlphaVendor", amount=Decimal("10.00")),
             source_name="alpha",
+            source_type="imap",
         )
         run_ingest(
             conn=pg_conn,
@@ -363,6 +368,7 @@ class TestMultiSourceIngest:
             store=store,
             agent=_make_mock_agent(vendor="BetaVendor", amount=Decimal("20.00")),
             source_name="beta",
+            source_type="imap",
         )
 
         alpha_rows = search_receipts(pg_conn, source_name="alpha")
@@ -420,6 +426,7 @@ class TestSourceFiltering:
             store=store,
             agent=_make_mock_agent(vendor="FilterVendorA", amount=Decimal("30.00")),
             source_name="filter-source-a",
+            source_type="imap",
         )
 
         assert result.processed == 1
@@ -465,6 +472,7 @@ class TestSourceFiltering:
             store=store,
             agent=_make_mock_agent(vendor="PidVendorA", amount=Decimal("50.00")),
             source_name="pid-a",
+            source_type="imap",
         )
 
         # get_processed_source_ids filtered to "pid-b" returns empty set
@@ -478,6 +486,7 @@ class TestSourceFiltering:
             store=store,
             agent=_make_mock_agent(vendor="PidVendorB", amount=Decimal("60.00")),
             source_name="pid-b",
+            source_type="imap",
         )
         assert result_b.processed == 1
 
@@ -531,6 +540,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=agent,
             source_name="idem-source",
+            source_type="imap",
         )
         assert r1.processed == 1
 
@@ -541,6 +551,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=_make_mock_agent(vendor="IdemVendor", amount=Decimal("75.00")),
             source_name="idem-source",
+            source_type="imap",
         )
         assert r2.processed == 0
 
@@ -583,6 +594,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=_make_mock_agent(vendor="FirstVendor", amount=Decimal("10.00")),
             source_name="idem2-source",
+            source_type="imap",
         )
 
         # Seed a second email
@@ -599,6 +611,7 @@ class TestIdempotentReIngest:
             store=store,
             agent=_make_mock_agent(vendor="SecondVendor", amount=Decimal("20.00")),
             source_name="idem2-source",
+            source_type="imap",
         )
         assert r2.processed == 1
 
@@ -649,6 +662,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="SearchVendorA", amount=Decimal("100.00")),
             source_name="search-a",
+            source_type="imap",
         )
         run_ingest(
             conn=pg_conn,
@@ -656,6 +670,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="SearchVendorB", amount=Decimal("200.00")),
             source_name="search-b",
+            source_type="imap",
         )
 
         results_a = search_receipts(pg_conn, source_name="search-a")
@@ -705,6 +720,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="ACME Corp", amount=Decimal("50.00")),
             source_name="combo-a",
+            source_type="imap",
         )
         run_ingest(
             conn=pg_conn,
@@ -712,6 +728,7 @@ class TestSearchWithSourceFilter:
             store=store,
             agent=_make_mock_agent(vendor="ACME Corp", amount=Decimal("50.00")),
             source_name="combo-b",
+            source_type="imap",
         )
 
         # Search vendor=ACME in combo-a only
@@ -846,6 +863,7 @@ class TestGdriveAdapterMocked:
                 store=store,
                 agent=agent,
                 source_name="scanned-receipts",
+                source_type="gdrive",
             )
 
         assert result.processed == 1
@@ -907,6 +925,7 @@ class TestGdriveAdapterMocked:
                 store=store,
                 agent=agent,
                 source_name="scanned-receipts",
+                source_type="gdrive",
             )
             assert r1.processed == 1
 
@@ -934,6 +953,7 @@ class TestGdriveAdapterMocked:
                 store=store,
                 agent=_make_mock_agent(vendor="DupeVendor", amount=Decimal("15.00")),
                 source_name="scanned-receipts",
+                source_type="gdrive",
             )
 
         assert r2.processed == 0
@@ -973,6 +993,7 @@ class TestGdriveAdapterMocked:
             store=store,
             agent=_make_mock_agent(),
             source_name="scanned-receipts",
+            source_type="gdrive",
         )
 
         # Nothing processed or failed — unsupported files are silently skipped
@@ -1005,6 +1026,7 @@ class TestGdriveAdapterMocked:
             store=store,
             agent=_make_mock_agent(),
             source_name="scanned-receipts",
+            source_type="gdrive",
         )
 
         assert result.processed == 0
