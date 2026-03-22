@@ -42,8 +42,16 @@ def _make_mock_agent(
         date=receipt_date or date(2025, 6, 15),
         confidence=confidence,
     )
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = 100
+    mock_usage.output_tokens = 50
+    mock_usage.cache_read_tokens = 0
+    mock_usage.requests = 1
+
     mock_result = MagicMock()
     mock_result.output = meta
+    mock_result.usage.return_value = mock_usage
+
     agent = MagicMock()
     agent.run_sync.return_value = mock_result
     return agent

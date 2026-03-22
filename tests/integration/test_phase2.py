@@ -63,8 +63,16 @@ def _make_mock_agent(
         date=receipt_date or date(2025, 6, 15),
         confidence=confidence,
     )
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = 100
+    mock_usage.output_tokens = 50
+    mock_usage.cache_read_tokens = 0
+    mock_usage.requests = 1
+
     mock_result = MagicMock()
     mock_result.output = meta
+    mock_result.usage.return_value = mock_usage
+
     agent = MagicMock()
     agent.run_sync.return_value = mock_result
     return agent
@@ -82,8 +90,15 @@ def _make_alternating_agent(
             date=rcpt_date,
             confidence=0.90,
         )
+        mock_usage = MagicMock()
+        mock_usage.input_tokens = 100
+        mock_usage.output_tokens = 50
+        mock_usage.cache_read_tokens = 0
+        mock_usage.requests = 1
+
         mock_result = MagicMock()
         mock_result.output = meta
+        mock_result.usage.return_value = mock_usage
         results.append(mock_result)
     agent = MagicMock()
     agent.run_sync.side_effect = results
@@ -1333,8 +1348,8 @@ class TestLoadConfigIntegration:
     def test_load_config_missing_env_var_raises_clear_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A config with unset ${VAR} raises ValueError naming all missing variables."""
-        from receipt_index.config import load_config
+        """Unset ${VAR} raises ConfigError naming all missing variables."""
+        from receipt_index.config import ConfigError, load_config
 
         # Ensure the var is NOT set
         monkeypatch.delenv("MISSING_VAR_ONE", raising=False)
@@ -1362,7 +1377,7 @@ class TestLoadConfigIntegration:
             )
         )
 
-        with pytest.raises(ValueError, match="MISSING_VAR"):
+        with pytest.raises(ConfigError, match="MISSING_VAR"):
             load_config(config_file)
 
     def test_load_config_two_sources(self, tmp_path: Path) -> None:
@@ -1413,9 +1428,9 @@ class TestLoadConfigIntegration:
         assert gdrive_src.folder_id == "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
 
     def test_load_config_missing_file_raises_clear_error(self, tmp_path: Path) -> None:
-        """A nonexistent config path raises FileNotFoundError or ValueError."""
-        from receipt_index.config import load_config
+        """A nonexistent config path raises ConfigError."""
+        from receipt_index.config import ConfigError, load_config
 
         missing = tmp_path / "does-not-exist.yaml"
-        with pytest.raises((FileNotFoundError, ValueError)):
+        with pytest.raises(ConfigError):
             load_config(missing)
