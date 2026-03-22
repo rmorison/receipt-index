@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from email.message import Message
 
-    from receipt_index.config import ImapConfig
+    from receipt_index.config import ImapSourceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +28,9 @@ _MAX_CONNECT_RETRIES = 3
 class ImapAdapter:
     """Fetch unprocessed receipts from an IMAP mailbox."""
 
-    def __init__(self, config: ImapConfig) -> None:
+    def __init__(self, config: ImapSourceConfig) -> None:
         self.config = config
+        self.name = config.name
 
     def fetch_unprocessed(self, processed_ids: set[str]) -> Iterator[RawReceipt]:
         """Connect to IMAP, fetch messages, yield those not yet processed."""
@@ -128,9 +129,11 @@ class ImapAdapter:
 
         return RawReceipt(
             source_id=source_id,
+            source_name=self.name,
+            source_type="imap",
+            date=email_date or datetime.now(tz=UTC),
             subject=subject,
             sender=sender,
-            date=email_date or datetime.now(tz=UTC),
             html_body=html_body,
             text_body=text_body,
             attachments=attachments,

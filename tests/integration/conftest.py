@@ -64,9 +64,11 @@ def _run_migrations(conn: psycopg.Connection[dict[str, Any]]) -> None:
             description     TEXT,
             confidence      REAL NOT NULL,
             pdf_path        TEXT NOT NULL,
+            source_name     TEXT NOT NULL DEFAULT 'legacy-imap',
             email_subject   TEXT,
             email_sender    TEXT,
             email_date      TIMESTAMPTZ,
+            file_name       TEXT,
             created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 

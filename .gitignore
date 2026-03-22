@@ -20,8 +20,9 @@ env/
 *.swo
 *~
 
-# Environment
+# Environment and config
 .env
+receipt-index.yaml
 
 # Data
 data/
@@ -43,6 +44,12 @@ coverage.xml
 
 # Playwright browsers
 .playwright/
+
+# Local tools (golang-migrate, etc.)
+.bin/
+
+# Local working notes
+PHASE2-PLAN.md
 
 # OS
 .DS_Store

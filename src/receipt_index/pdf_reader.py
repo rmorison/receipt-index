@@ -9,8 +9,6 @@ from typing import Any
 import pdfplumber
 from pydantic_ai import Agent, BinaryContent
 
-from receipt_index.config import get_anthropic_api_key, get_llm_model
-
 logger = logging.getLogger(__name__)
 
 # Minimum non-whitespace characters to consider pdfplumber output valid.
@@ -63,12 +61,26 @@ def extract_text(
     return _extract_with_vision(pdf_bytes, agent=vision_agent)
 
 
-def create_vision_agent() -> Agent[None, str]:
-    """Create a pydantic-ai Agent configured for PDF text extraction."""
-    get_anthropic_api_key()  # Fail fast if missing
-    model_name = get_llm_model()
+def create_vision_agent(
+    *,
+    api_key: str,
+    model: str = "claude-haiku-4-5-20251001",
+) -> Agent[None, str]:
+    """Create a pydantic-ai Agent configured for PDF text extraction.
+
+    Parameters
+    ----------
+    api_key:
+        Anthropic API key.
+    model:
+        Model identifier.
+    """
+    if not api_key:
+        msg = "Anthropic API key is required"
+        raise ValueError(msg)
+
     return Agent(
-        f"anthropic:{model_name}",
+        f"anthropic:{model}",
         output_type=str,
         system_prompt=_VISION_SYSTEM_PROMPT,
     )
@@ -98,7 +110,8 @@ def _extract_with_vision(
 ) -> str:
     """Extract text from PDF using Claude vision API."""
     if agent is None:
-        agent = create_vision_agent()
+        logger.warning("No vision agent provided; skipping vision extraction")
+        return ""
 
     try:
         result: Any = agent.run_sync(

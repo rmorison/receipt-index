@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_MIN_CONFIDENCE = 0.5
+
 
 @dataclass
 class IngestResult:
@@ -40,6 +42,8 @@ def run_ingest(
     conn: psycopg.Connection[dict[str, Any]],
     adapter: SourceAdapter,
     store: FileStore,
+    source_name: str,
+    source_type: str = "imap",
     agent: Agent[None, ReceiptMetadata] | None = None,
     dry_run: bool = False,
     limit: int | None = None,
@@ -50,6 +54,8 @@ def run_ingest(
     renders PDFs, saves to the file store, and inserts into the database.
     """
     result = IngestResult()
+    # Check all source_ids globally — the UNIQUE constraint is on source_id alone,
+    # so we must skip any ID that exists regardless of source_name.
     processed_ids = get_processed_source_ids(conn)
 
     count = 0
@@ -65,6 +71,34 @@ def run_ingest(
 
         try:
             metadata = extract_metadata(raw, agent=agent)
+
+            # Skip non-receipts based on low LLM confidence only.
+            # amount == 0 is valid (e.g. prepaid postage receipts).
+            if metadata.confidence < _MIN_CONFIDENCE:
+                reason = (
+                    f"amount={metadata.amount}, confidence={metadata.confidence:.2f}"
+                )
+                logger.info(
+                    "Skipped non-receipt %s (%s): %s",
+                    raw.source_id,
+                    raw.subject,
+                    reason,
+                )
+                insert_ingest_log(
+                    conn,
+                    source_id=raw.source_id,
+                    source_type=source_type,
+                    status="skipped",
+                    vendor=metadata.vendor,
+                    amount=metadata.amount,
+                    email_subject=raw.subject,
+                    email_sender=raw.sender,
+                    email_date=raw.date if raw.source_type == "imap" else None,
+                    error_message=f"Skipped: {reason}",
+                )
+                result.skipped += 1
+                continue
+
             pdf_data = render_pdf(raw)
             pdf_path = store.save(
                 metadata.date, metadata.vendor, metadata.amount, pdf_data
@@ -72,7 +106,8 @@ def run_ingest(
             receipt = insert_receipt(
                 conn,
                 source_id=raw.source_id,
-                source_type="imap",
+                source_type=source_type,
+                source_name=source_name,
                 vendor=metadata.vendor,
                 amount=metadata.amount,
                 currency=metadata.currency,
@@ -82,21 +117,21 @@ def run_ingest(
                 pdf_path=pdf_path,
                 email_subject=raw.subject,
                 email_sender=raw.sender,
-                email_date=raw.date,
+                email_date=raw.date if raw.source_type == "imap" else None,
             )
             result.processed += 1
             result.receipts.append(receipt)
             insert_ingest_log(
                 conn,
                 source_id=raw.source_id,
-                source_type="imap",
+                source_type=source_type,
                 status="success",
                 receipt_id=receipt.id,
                 vendor=metadata.vendor,
                 amount=metadata.amount,
                 email_subject=raw.subject,
                 email_sender=raw.sender,
-                email_date=raw.date,
+                email_date=raw.date if raw.source_type == "imap" else None,
             )
             logger.info(
                 "Processed receipt: %s (%s) confidence=%.2f",
@@ -105,15 +140,17 @@ def run_ingest(
                 metadata.confidence,
             )
         except Exception as exc:
+            # Rollback failed transaction so the ingest_log write succeeds
+            conn.rollback()
             try:
                 insert_ingest_log(
                     conn,
                     source_id=raw.source_id,
-                    source_type="imap",
+                    source_type=source_type,
                     status="failed",
                     email_subject=raw.subject,
                     email_sender=raw.sender,
-                    email_date=raw.date,
+                    email_date=raw.date if raw.source_type == "imap" else None,
                     error_message=str(exc),
                 )
             except Exception:

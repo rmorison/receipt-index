@@ -22,22 +22,33 @@ class Attachment:
 
 @dataclass
 class RawReceipt:
-    """Raw receipt data from a source adapter."""
+    """Raw receipt data from a source adapter.
+
+    Supports both email-based (IMAP) and file-based (Google Drive) sources.
+    Email fields (subject, sender, html_body, text_body, attachments) are used
+    by the IMAP adapter. File fields (file_name, file_content, file_content_type)
+    are used by the Drive adapter.
+    """
 
     source_id: str
-    subject: str
-    sender: str
+    source_name: str
+    source_type: str
     date: datetime
+    subject: str = ""
+    sender: str = ""
     html_body: str | None = None
     text_body: str | None = None
     attachments: list[Attachment] = field(default_factory=list)
+    file_name: str | None = None
+    file_content: bytes | None = None
+    file_content_type: str | None = None
 
 
 class ReceiptMetadata(BaseModel):
     """Structured metadata extracted from a receipt by the LLM."""
 
     vendor: str = Field(min_length=1)
-    amount: Decimal = Field(gt=0)
+    amount: Decimal = Field(ge=0)
     currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
     date: date
     description: str | None = None
@@ -50,6 +61,7 @@ class Receipt(BaseModel):
     id: UUID
     source_id: str
     source_type: str
+    source_name: str
     vendor: str
     amount: Decimal
     currency: str
@@ -60,6 +72,7 @@ class Receipt(BaseModel):
     email_subject: str | None
     email_sender: str | None
     email_date: datetime | None
+    file_name: str | None = None
     created_at: datetime
     updated_at: datetime
 

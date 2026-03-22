@@ -7,12 +7,17 @@ license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "click>=8.1",
+    "google-api-python-client>=2.0",
+    "google-auth>=2.0",
+    "google-auth-oauthlib>=1.0",
+    "Pillow>=10.0",
     "pydantic>=2.0",
     "pydantic-ai>=0.1",
     "psycopg[binary]>=3.1",
     "pdfplumber>=0.10",
     "playwright>=1.40",
     "python-dotenv>=1.0",
+    "pyyaml>=6.0",
     "python-slugify>=8.0",
     "weasyprint>=62.0",
 ]
@@ -60,6 +65,7 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 # Pydantic models need these imports at runtime for type resolution
 "src/receipt_index/models.py" = ["TC003"]
+"src/receipt_index/config.py" = ["TC003"]
 # pydantic-ai Agent uses Pydantic output types that need runtime imports
 "src/receipt_index/extraction.py" = ["TC003"]
 # pydantic-ai BinaryContent needs runtime import for Agent usage
@@ -76,7 +82,7 @@ warn_unused_configs = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["pdfplumber.*", "playwright.*", "slugify.*", "weasyprint.*", "pydantic_ai.*"]
+module = ["google.auth.*", "google.oauth2.*", "google_auth_oauthlib.*", "googleapiclient.*", "pdfplumber.*", "PIL.*", "playwright.*", "slugify.*", "weasyprint.*", "pydantic_ai.*", "yaml.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

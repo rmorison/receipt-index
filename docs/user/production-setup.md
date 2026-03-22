@@ -52,21 +52,42 @@ GRANT CONNECT ON DATABASE receipt_index TO receipt_index_dev_read;
 
 The `_dev_` suffix in the role names is just a convention from the Docker dev setup — the grant migration references these names, so we reuse them here to keep things simple.
 
+### Alternative: Single Application Role
+
+If you prefer a simpler setup with one application role, create it and then add the grant target roles as members:
+
+```bash
+sudo -u postgres psql
+```
+
+```sql
+CREATE DATABASE receipt_index;
+
+-- Single application role
+CREATE ROLE receipt_index WITH LOGIN PASSWORD 'your-secure-password';  -- pragma: allowlist secret
+GRANT CONNECT ON DATABASE receipt_index TO receipt_index;
+
+-- Create grant target roles (referenced by migrations) and assign to the app role
+CREATE ROLE receipt_index_dev_write;
+CREATE ROLE receipt_index_dev_read;
+GRANT receipt_index_dev_write TO receipt_index;
+GRANT receipt_index_dev_read TO receipt_index;
+
+\q
+```
+
+This gives `receipt_index` all the permissions that the migrations grant to the `_write` and `_read` roles.
+
 ## 3. Run Migrations
 
 Set the migration URL to use the `postgres` superuser (or another superuser role) and point it at your native cluster:
 
 ```bash
 export MIGRATION_DATABASE_URL="postgresql://postgres@localhost:5432/receipt_index?sslmode=disable"
-
-migrate -path db/migrations/public \
-  -database "${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_public" up
-
-migrate -path db/migrations/receipt \
-  -database "${MIGRATION_DATABASE_URL}&x-migrations-table=schema_migrations_receipt" up
+make migrate-up
 ```
 
-The migrations create the `receipt` schema, tables, indexes, and grant permissions to the application roles created in step 2.
+This auto-downloads golang-migrate if needed, then applies all migrations in schema dependency order. The migrations create the `receipt` schema, tables, indexes, and grant permissions to the application roles created in step 2.
 
 ## 4. Configure `.env`
 

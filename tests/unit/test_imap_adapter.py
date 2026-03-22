@@ -16,7 +16,7 @@ import pytest
 from receipt_index.adapters.imap import ImapAdapter
 
 if TYPE_CHECKING:
-    from receipt_index.config import ImapConfig
+    from receipt_index.config import ImapSourceConfig
 
 
 def _make_simple_email(
@@ -245,7 +245,7 @@ class TestFetchUnprocessed:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_yields_unprocessed_messages(
-        self, mock_ssl: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         email1 = _make_simple_email(
             message_id="<msg-1@example.com>", subject="Receipt 1"
@@ -266,7 +266,7 @@ class TestFetchUnprocessed:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_skips_processed_messages(
-        self, mock_ssl: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         email1 = _make_simple_email(
             message_id="<msg-1@example.com>", subject="Receipt 1"
@@ -285,7 +285,9 @@ class TestFetchUnprocessed:
         assert results[0].source_id == "<msg-2@example.com>"
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
-    def test_empty_folder(self, mock_ssl: MagicMock, imap_config: ImapConfig) -> None:
+    def test_empty_folder(
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
+    ) -> None:
         conn = self._mock_imap_connection({})
         mock_ssl.return_value = conn
 
@@ -296,7 +298,7 @@ class TestFetchUnprocessed:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_logout_called_on_success(
-        self, mock_ssl: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         conn = self._mock_imap_connection({})
         mock_ssl.return_value = conn
@@ -308,7 +310,7 @@ class TestFetchUnprocessed:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_logout_called_on_error(
-        self, mock_ssl: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         conn = MagicMock()
         conn.select.side_effect = Exception("Connection lost")
@@ -322,7 +324,7 @@ class TestFetchUnprocessed:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_connection_uses_config(
-        self, mock_ssl: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         conn = self._mock_imap_connection({})
         mock_ssl.return_value = conn
@@ -336,11 +338,9 @@ class TestFetchUnprocessed:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4")
     def test_plain_imap_when_ssl_disabled(
-        self, mock_imap: MagicMock, imap_config: ImapConfig
+        self, mock_imap: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
-        from dataclasses import replace
-
-        plain_config = replace(imap_config, use_ssl=False, port=143)
+        plain_config = imap_config.model_copy(update={"use_ssl": False, "port": 143})
         conn = self._mock_imap_connection({})
         mock_imap.return_value = conn
 
@@ -352,7 +352,7 @@ class TestFetchUnprocessed:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_parses_email_fields(
-        self, mock_ssl: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         email_bytes = _make_simple_email(
             subject="Your Order",
@@ -382,7 +382,7 @@ class TestConnectRetry:
     @patch("receipt_index.adapters.imap.time.sleep")
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_retries_on_connection_failure(
-        self, mock_ssl: MagicMock, mock_sleep: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, mock_sleep: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         conn = MagicMock()
         conn.select.return_value = ("OK", [b"1"])
@@ -402,7 +402,7 @@ class TestConnectRetry:
     @patch("receipt_index.adapters.imap.time.sleep")
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_raises_after_max_retries(
-        self, mock_ssl: MagicMock, mock_sleep: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, mock_sleep: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         mock_ssl.side_effect = OSError("connection refused")
 
@@ -415,7 +415,7 @@ class TestConnectRetry:
 
     @patch("receipt_index.adapters.imap.imaplib.IMAP4_SSL")
     def test_imap_error_not_retried(
-        self, mock_ssl: MagicMock, imap_config: ImapConfig
+        self, mock_ssl: MagicMock, imap_config: ImapSourceConfig
     ) -> None:
         """IMAP protocol/auth errors should propagate immediately, not retry."""
         mock_ssl.side_effect = imaplib.IMAP4.error("auth fail")
