@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from receipt_index.adapters.imap import ImapAdapter
-from receipt_index.config import ImapConfig
+from receipt_index.config import ImapSourceConfig
 from receipt_index.models import ReceiptMetadata
 from receipt_index.pipeline import run_ingest
 from receipt_index.repository import get_processed_source_ids, search_receipts
@@ -55,9 +55,10 @@ def _unique_user(prefix: str = "test") -> str:
     return f"{prefix}-{short_id}@localhost"
 
 
-def _greenmail_imap_config(user: str = "test@localhost") -> ImapConfig:
+def _greenmail_imap_config(user: str = "test@localhost") -> ImapSourceConfig:
     """IMAP config pointing at GreenMail."""
-    return ImapConfig(
+    return ImapSourceConfig(
+        name="greenmail-test",
         host="localhost",
         username=user,
         password="any",  # pragma: allowlist secret
@@ -94,6 +95,7 @@ class TestFullPipelineE2E:
             conn=pg_conn,
             adapter=adapter,
             store=store,
+            source_name="greenmail-test",
             agent=agent,
         )
 
@@ -135,13 +137,21 @@ class TestFullPipelineE2E:
 
         # First run
         r1 = run_ingest(
-            conn=pg_conn, adapter=ImapAdapter(config), store=store, agent=agent
+            conn=pg_conn,
+            adapter=ImapAdapter(config),
+            store=store,
+            source_name="greenmail-test",
+            agent=agent,
         )
         assert r1.processed == 1
 
         # Second run — same email should be skipped
         r2 = run_ingest(
-            conn=pg_conn, adapter=ImapAdapter(config), store=store, agent=agent
+            conn=pg_conn,
+            adapter=ImapAdapter(config),
+            store=store,
+            source_name="greenmail-test",
+            agent=agent,
         )
         assert r2.processed == 0
         assert r2.skipped == 0  # not dry_run, just no unprocessed messages
@@ -172,6 +182,7 @@ class TestFullPipelineE2E:
             conn=pg_conn,
             adapter=adapter,
             store=store,
+            source_name="greenmail-test",
             agent=_make_mock_agent(),
             dry_run=True,
         )
@@ -207,6 +218,7 @@ class TestFullPipelineE2E:
             conn=pg_conn,
             adapter=adapter,
             store=store,
+            source_name="greenmail-test",
             agent=agent,
         )
 
@@ -238,6 +250,7 @@ class TestFullPipelineE2E:
             conn=pg_conn,
             adapter=adapter,
             store=store,
+            source_name="greenmail-test",
             agent=agent,
             limit=2,
         )
@@ -274,6 +287,7 @@ class TestFullPipelineE2E:
             conn=pg_conn,
             adapter=adapter,
             store=store,
+            source_name="greenmail-test",
             agent=agent,
         )
 
@@ -324,7 +338,13 @@ class TestFullPipelineE2E:
         r1.output, r2.output = meta1, meta2
         agent.run_sync.side_effect = [r1, r2]
 
-        run_ingest(conn=pg_conn, adapter=adapter, store=store, agent=agent)
+        run_ingest(
+            conn=pg_conn,
+            adapter=adapter,
+            store=store,
+            source_name="greenmail-test",
+            agent=agent,
+        )
 
         # Search by vendor
         acme = search_receipts(pg_conn, vendor="ACME")

@@ -19,6 +19,7 @@ _RECEIPT_ROW: dict[str, Any] = {
     "id": UUID("019572a0-0000-7000-8000-000000000001"),
     "source_id": "<msg-1@example.com>",
     "source_type": "imap",
+    "source_name": "test-email",
     "vendor": "Amazon",
     "amount": Decimal("42.99"),
     "currency": "USD",
@@ -29,6 +30,7 @@ _RECEIPT_ROW: dict[str, Any] = {
     "email_subject": "Your Amazon.com order",
     "email_sender": "no-reply@amazon.com",
     "email_date": datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC),
+    "file_name": None,
     "created_at": datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
     "updated_at": datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
 }
@@ -68,7 +70,11 @@ class TestGetProcessedSourceIds:
     def test_executes_correct_sql(self) -> None:
         conn = _mock_conn([])
         get_processed_source_ids(conn)
-        conn.execute.assert_called_once_with("SELECT source_id FROM receipt.receipts")
+        conn.execute.assert_called_once_with(
+            "SELECT source_id FROM receipt.receipts "
+            "UNION "
+            "SELECT source_id FROM receipt.ingest_log"
+        )
 
 
 class TestInsertReceipt:
@@ -80,6 +86,7 @@ class TestInsertReceipt:
             conn,
             source_id="<msg-1@example.com>",
             source_type="imap",
+            source_name="test-email",
             vendor="Amazon",
             amount=Decimal("42.99"),
             currency="USD",
@@ -101,6 +108,7 @@ class TestInsertReceipt:
             conn,
             source_id="<msg-1@example.com>",
             source_type="imap",
+            source_name="test-email",
             vendor="Amazon",
             amount=Decimal("42.99"),
             currency="USD",
@@ -120,6 +128,7 @@ class TestInsertReceipt:
             conn,
             source_id="<msg-1@example.com>",
             source_type="imap",
+            source_name="test-email",
             vendor="Amazon",
             amount=Decimal("42.99"),
             currency="USD",

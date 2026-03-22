@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from receipt_index.config import ImapConfig
+from receipt_index.config import ImapSourceConfig
 from receipt_index.models import RawReceipt
 
 if TYPE_CHECKING:
@@ -23,9 +23,10 @@ def store_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def imap_config() -> ImapConfig:
+def imap_config() -> ImapSourceConfig:
     """Provide a test IMAP configuration."""
-    return ImapConfig(
+    return ImapSourceConfig(
+        name="test-imap",
         host="imap.example.com",
         username="test@example.com",
         password="secret",  # pragma: allowlist secret
@@ -39,8 +40,10 @@ def sample_raw_receipt() -> RawReceipt:
     """Provide a minimal RawReceipt for extraction and renderer tests."""
     return RawReceipt(
         source_id="<test-123@example.com>",
+        source_name="test-imap",
+        source_type="imap",
+        date=datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC),
         subject="Your Amazon.com order",
         sender="no-reply@amazon.com",
-        date=datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC),
         text_body="Order Total: $42.99\nItem: Python Cookbook",
     )

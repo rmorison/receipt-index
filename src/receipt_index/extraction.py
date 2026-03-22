@@ -6,9 +6,8 @@ import logging
 from html.parser import HTMLParser
 from typing import Any
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, BinaryContent
 
-from receipt_index.config import get_anthropic_api_key, get_llm_model
 from receipt_index.models import Attachment, RawReceipt, ReceiptMetadata
 
 logger = logging.getLogger(__name__)
@@ -34,17 +33,45 @@ For multi-item orders, use the total amount. If the currency is not stated, \
 assume USD.\
 """
 
+DOCUMENT_SYSTEM_PROMPT = """\
+You are a receipt metadata extractor. Given a receipt document (scanned image \
+or PDF), extract the following fields:
 
-def create_extraction_agent() -> Agent[None, ReceiptMetadata]:
+- vendor: The business name on the receipt (or payment recipient)
+- amount: The total amount charged (numeric, e.g. 42.99). May be 0 for \
+prepaid items (e.g. prepaid postage).
+- currency: ISO 4217 currency code (e.g. "USD")
+- date: The transaction date (YYYY-MM-DD)
+- description: Brief summary of what was purchased (optional)
+- confidence: Your confidence in the extraction from 0.0 to 1.0. \
+Use below 0.5 if this does not appear to be a receipt or key fields are unclear.
+
+Payment confirmations (Zelle, Venmo, PayPal, bank transfers, wire transfers) \
+are valid receipts. The vendor is the payment recipient. Use high confidence \
+if the amount, recipient, and date are clearly visible.
+
+For multi-item receipts, use the total amount. If the currency is not stated, \
+assume USD.\
+"""
+
+# Minimum non-whitespace characters for PDF text to be considered sufficient.
+# Matches the threshold used in pdf_reader.py.
+_MIN_TEXT_LENGTH = 20
+
+_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png"})
+
+
+def create_extraction_agent(
+    *,
+    api_key: str,
+    model: str,
+    system_prompt: str = _SYSTEM_PROMPT,
+) -> Agent[None, ReceiptMetadata]:
     """Create a pydantic-ai Agent configured for receipt extraction."""
-    # Ensure API key is available (fail fast)
-    get_anthropic_api_key()
-
-    model_name = get_llm_model()
     return Agent(
-        f"anthropic:{model_name}",
+        f"anthropic:{model}",
         output_type=ReceiptMetadata,
-        system_prompt=_SYSTEM_PROMPT,
+        system_prompt=system_prompt,
     )
 
 
@@ -53,17 +80,119 @@ def extract_metadata(
     *,
     agent: Agent[None, ReceiptMetadata] | None = None,
 ) -> ReceiptMetadata:
-    """Extract structured metadata from a raw receipt email.
+    """Extract structured metadata from a raw receipt.
+
+    Routes to the appropriate extraction path based on ``raw.source_type``:
+    - ``"gdrive"``: document-based extraction (vision or PDF text)
+    - Otherwise: email-based extraction (existing path)
 
     Accepts an optional agent for dependency injection in tests.
     """
+    if raw.source_type == "gdrive":
+        return _extract_from_document(raw, agent=agent)
+    return _extract_from_email(raw, agent=agent)
+
+
+def _extract_from_email(
+    raw: RawReceipt,
+    *,
+    agent: Agent[None, ReceiptMetadata] | None = None,
+) -> ReceiptMetadata:
+    """Extract metadata from an email-sourced receipt."""
     if agent is None:
-        agent = create_extraction_agent()
+        msg = "No extraction agent provided."
+        raise ValueError(msg)
 
     pdf_text = _extract_pdf_text(raw.attachments)
     prompt = _build_prompt(raw, pdf_text=pdf_text)
     result: Any = agent.run_sync(prompt)
     return result.output  # type: ignore[no-any-return]
+
+
+def _extract_from_document(
+    raw: RawReceipt,
+    *,
+    agent: Agent[None, ReceiptMetadata] | None = None,
+) -> ReceiptMetadata:
+    """Extract metadata from a Drive-sourced document (PDF or image).
+
+    For PDFs: extract text first; if insufficient, fall back to vision.
+    For images: send directly to the LLM as image input.
+    """
+    if agent is None:
+        msg = "No extraction agent provided."
+        raise ValueError(msg)
+
+    if raw.file_content is None:
+        raise ValueError("Drive-sourced receipt has no file_content")
+
+    content_type = (raw.file_content_type or "").lower()
+
+    if content_type == "application/pdf":
+        return _extract_from_pdf_document(raw.file_content, agent=agent)
+
+    if content_type in _IMAGE_CONTENT_TYPES:
+        return _extract_from_image(raw.file_content, content_type, agent=agent)
+
+    raise ValueError(
+        f"Unsupported file content type for document extraction: {content_type!r}"
+    )
+
+
+def _extract_from_pdf_document(
+    pdf_bytes: bytes,
+    *,
+    agent: Agent[None, ReceiptMetadata],
+) -> ReceiptMetadata:
+    """Extract metadata from a PDF document.
+
+    Tries text extraction first. If the text is insufficient (< 20 non-whitespace
+    chars), falls back to sending the PDF as binary content for vision analysis.
+    """
+    from receipt_index.pdf_reader import extract_text
+
+    text = extract_text(pdf_bytes)
+
+    if _has_sufficient_text(text):
+        logger.debug("Using text-based extraction for PDF (%d chars)", len(text))
+        result: Any = agent.run_sync(
+            f"Extract receipt metadata from this document text:\n\n{text}"
+        )
+        return result.output  # type: ignore[no-any-return]
+
+    logger.info(
+        "PDF text extraction insufficient (%d non-ws chars), using vision",
+        len("".join(text.split())),
+    )
+    result = agent.run_sync(
+        [
+            "Extract receipt metadata from this PDF document.",
+            BinaryContent(data=pdf_bytes, media_type="application/pdf"),
+        ]
+    )
+    return result.output  # type: ignore[no-any-return]
+
+
+def _extract_from_image(
+    image_data: bytes,
+    content_type: str,
+    *,
+    agent: Agent[None, ReceiptMetadata],
+) -> ReceiptMetadata:
+    """Extract metadata from an image file by sending it to the LLM via vision."""
+    result: Any = agent.run_sync(
+        [
+            "Extract receipt metadata from this receipt image.",
+            BinaryContent(data=image_data, media_type=content_type),
+        ]
+    )
+    return result.output  # type: ignore[no-any-return]
+
+
+def _has_sufficient_text(text: str) -> bool:
+    """Check if extracted text meets the minimum quality threshold."""
+    stripped = "".join(text.split())
+    return len(stripped) >= _MIN_TEXT_LENGTH
 
 
 def _build_prompt(raw: RawReceipt, *, pdf_text: str | None = None) -> str:

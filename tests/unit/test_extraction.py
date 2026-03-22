@@ -6,9 +6,13 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from receipt_index.extraction import (
     _build_prompt,
+    _extract_from_document,
     _extract_pdf_text,
+    _has_sufficient_text,
     _strip_html_tags,
     extract_metadata,
 )
@@ -32,6 +36,8 @@ class TestBuildPrompt:
     def test_strips_html_when_no_text_body(self) -> None:
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="HTML Receipt",
             sender="shop@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -45,6 +51,8 @@ class TestBuildPrompt:
     def test_prefers_text_over_html(self) -> None:
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Both",
             sender="shop@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -58,6 +66,8 @@ class TestBuildPrompt:
     def test_handles_no_body(self) -> None:
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Empty",
             sender="x@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -182,6 +192,8 @@ class TestExtractMetadata:
     def test_includes_pdf_text_in_prompt(self, _mock_pdf_extract: MagicMock) -> None:
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Receipt",
             sender="shop@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -250,3 +262,191 @@ class TestExtractPdfText:
         result = _extract_pdf_text(attachments)
         assert result == "first pdf text"
         mock_extract.assert_called_once_with(b"%PDF-first")
+
+
+class TestHasSufficientText:
+    """Tests for _has_sufficient_text."""
+
+    def test_sufficient_text(self) -> None:
+        assert _has_sufficient_text("A" * 20) is True
+
+    def test_insufficient_text(self) -> None:
+        assert _has_sufficient_text("short") is False
+
+    def test_whitespace_stripped(self) -> None:
+        # 10 chars with spaces should not count as 20
+        assert _has_sufficient_text("a b c d e f g h i j") is False
+
+    def test_empty_string(self) -> None:
+        assert _has_sufficient_text("") is False
+
+
+class TestExtractMetadataRouting:
+    """Tests for source_type routing in extract_metadata."""
+
+    def _mock_agent(self) -> MagicMock:
+        mock_result = MagicMock()
+        mock_result.output = ReceiptMetadata(
+            vendor="TestVendor",
+            amount=Decimal("10.00"),
+            date=date(2025, 1, 1),
+            confidence=0.9,
+        )
+        agent = MagicMock()
+        agent.run_sync.return_value = mock_result
+        return agent
+
+    def test_email_source_uses_email_path(self) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            source_type="imap",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            subject="Receipt",
+            sender="shop@example.com",
+            text_body="Total: $10.00",
+        )
+        agent = self._mock_agent()
+        result = extract_metadata(raw, agent=agent)
+
+        assert result.vendor == "TestVendor"
+        # Email path sends a string prompt, not a list
+        prompt = agent.run_sync.call_args[0][0]
+        assert isinstance(prompt, str)
+        assert "Subject: Receipt" in prompt
+
+    @patch(
+        "receipt_index.pdf_reader.extract_text",
+        return_value="Vendor: Shop Total: $25",
+    )
+    def test_gdrive_source_uses_document_path(self, _mock_extract: MagicMock) -> None:
+        raw = RawReceipt(
+            source_id="drive-file-1",
+            source_name="test-source",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            source_type="gdrive",
+            file_content=b"%PDF-test-content",
+            file_content_type="application/pdf",
+        )
+        agent = self._mock_agent()
+        result = extract_metadata(raw, agent=agent)
+
+        assert result.vendor == "TestVendor"
+        # PDF with sufficient text sends a text prompt
+        prompt = agent.run_sync.call_args[0][0]
+        assert isinstance(prompt, str)
+        assert "Vendor: Shop" in prompt
+
+
+class TestExtractFromDocument:
+    """Tests for _extract_from_document."""
+
+    def _mock_agent(self) -> MagicMock:
+        mock_result = MagicMock()
+        mock_result.output = ReceiptMetadata(
+            vendor="Store",
+            amount=Decimal("15.00"),
+            date=date(2025, 3, 1),
+            confidence=0.85,
+        )
+        agent = MagicMock()
+        agent.run_sync.return_value = mock_result
+        return agent
+
+    def test_raises_without_file_content(self) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            source_type="gdrive",
+            file_content=None,
+            file_content_type="application/pdf",
+        )
+        with pytest.raises(ValueError, match="no file_content"):
+            _extract_from_document(raw, agent=self._mock_agent())
+
+    def test_raises_for_unsupported_content_type(self) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            source_type="gdrive",
+            file_content=b"data",
+            file_content_type="text/plain",
+        )
+        with pytest.raises(ValueError, match="Unsupported file content type"):
+            _extract_from_document(raw, agent=self._mock_agent())
+
+    @patch(
+        "receipt_index.pdf_reader.extract_text",
+        return_value="Sufficient text content that is longer than 20 chars",
+    )
+    def test_pdf_with_sufficient_text_uses_text_path(
+        self, mock_extract: MagicMock
+    ) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            source_type="gdrive",
+            file_content=b"%PDF-test",
+            file_content_type="application/pdf",
+        )
+        agent = self._mock_agent()
+        _extract_from_document(raw, agent=agent)
+
+        mock_extract.assert_called_once_with(b"%PDF-test")
+        prompt = agent.run_sync.call_args[0][0]
+        assert isinstance(prompt, str)
+        assert "Sufficient text content" in prompt
+
+    @patch("receipt_index.pdf_reader.extract_text", return_value="short")
+    def test_pdf_with_insufficient_text_uses_vision(
+        self, _mock_extract: MagicMock
+    ) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            source_type="gdrive",
+            file_content=b"%PDF-scanned",
+            file_content_type="application/pdf",
+        )
+        agent = self._mock_agent()
+        _extract_from_document(raw, agent=agent)
+
+        # Vision path sends a list with BinaryContent
+        call_args = agent.run_sync.call_args[0][0]
+        assert isinstance(call_args, list)
+        assert len(call_args) == 2
+
+    def test_image_jpeg_uses_vision(self) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            source_type="gdrive",
+            file_content=b"\xff\xd8\xff\xe0fake-jpeg",
+            file_content_type="image/jpeg",
+        )
+        agent = self._mock_agent()
+        _extract_from_document(raw, agent=agent)
+
+        call_args = agent.run_sync.call_args[0][0]
+        assert isinstance(call_args, list)
+        assert len(call_args) == 2
+
+    def test_image_png_uses_vision(self) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            source_type="gdrive",
+            file_content=b"\x89PNGfake-png",
+            file_content_type="image/png",
+        )
+        agent = self._mock_agent()
+        _extract_from_document(raw, agent=agent)
+
+        call_args = agent.run_sync.call_args[0][0]
+        assert isinstance(call_args, list)

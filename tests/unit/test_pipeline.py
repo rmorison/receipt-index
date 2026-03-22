@@ -15,6 +15,7 @@ _RECEIPT_ROW: dict[str, Any] = {
     "id": UUID("019572a0-0000-7000-8000-000000000001"),
     "source_id": "<msg-1@example.com>",
     "source_type": "imap",
+    "source_name": "personal-email",
     "vendor": "Amazon",
     "amount": Decimal("42.99"),
     "currency": "USD",
@@ -25,6 +26,7 @@ _RECEIPT_ROW: dict[str, Any] = {
     "email_subject": "Your Amazon.com order",
     "email_sender": "no-reply@amazon.com",
     "email_date": datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC),
+    "file_name": None,
     "created_at": datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
     "updated_at": datetime(2025, 6, 15, 12, 0, 0, tzinfo=UTC),
 }
@@ -41,12 +43,18 @@ _SAMPLE_METADATA = ReceiptMetadata(
 )
 
 
-def _make_raw(source_id: str = "<msg-1@example.com>") -> RawReceipt:
+def _make_raw(
+    source_id: str = "<msg-1@example.com>",
+    source_name: str = "personal-email",
+    source_type: str = "imap",
+) -> RawReceipt:
     return RawReceipt(
         source_id=source_id,
+        source_name=source_name,
+        source_type=source_type,
+        date=datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC),
         subject="Your Amazon.com order",
         sender="no-reply@amazon.com",
-        date=datetime(2025, 6, 15, 10, 30, 0, tzinfo=UTC),
         text_body="Order Total: $42.99",
     )
 
@@ -92,7 +100,13 @@ class TestRunIngest:
         adapter = _mock_adapter([_make_raw()])
         store = _mock_store()
 
-        result = run_ingest(conn=conn, adapter=adapter, store=store)
+        result = run_ingest(
+            conn=conn,
+            adapter=adapter,
+            store=store,
+            source_name="test-imap",
+            source_type="imap",
+        )
 
         assert result.processed == 1
         assert result.skipped == 0
@@ -112,7 +126,14 @@ class TestRunIngest:
         adapter = _mock_adapter([_make_raw(), _make_raw("<msg-2@example.com>")])
         store = _mock_store()
 
-        result = run_ingest(conn=conn, adapter=adapter, store=store, dry_run=True)
+        result = run_ingest(
+            conn=conn,
+            adapter=adapter,
+            store=store,
+            source_name="test-imap",
+            source_type="imap",
+            dry_run=True,
+        )
 
         assert result.processed == 0
         assert result.skipped == 2
@@ -136,7 +157,14 @@ class TestRunIngest:
         adapter = _mock_adapter(raws)
         store = _mock_store()
 
-        result = run_ingest(conn=conn, adapter=adapter, store=store, limit=2)
+        result = run_ingest(
+            conn=conn,
+            adapter=adapter,
+            store=store,
+            source_name="test-imap",
+            source_type="imap",
+            limit=2,
+        )
 
         assert result.processed == 2
 
@@ -156,7 +184,13 @@ class TestRunIngest:
         adapter = _mock_adapter([_make_raw(), _make_raw("<msg-2@example.com>")])
         store = _mock_store()
 
-        result = run_ingest(conn=conn, adapter=adapter, store=store)
+        result = run_ingest(
+            conn=conn,
+            adapter=adapter,
+            store=store,
+            source_name="test-imap",
+            source_type="imap",
+        )
 
         assert result.failed == 2
         assert result.processed == 0
@@ -183,7 +217,14 @@ class TestRunIngest:
         store = _mock_store()
         mock_agent = MagicMock()
 
-        run_ingest(conn=conn, adapter=adapter, store=store, agent=mock_agent)
+        run_ingest(
+            conn=conn,
+            adapter=adapter,
+            store=store,
+            source_name="test-imap",
+            source_type="imap",
+            agent=mock_agent,
+        )
 
         mock_extract.assert_called_once()
         _, kwargs = mock_extract.call_args

@@ -50,14 +50,14 @@ class TestReceiptMetadata:
                 confidence=0.9,
             )
 
-    def test_zero_amount_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="amount"):
-            ReceiptMetadata(
-                vendor="Amazon",
-                amount=Decimal("0"),
-                date=date(2025, 6, 15),
-                confidence=0.9,
-            )
+    def test_zero_amount_accepted(self) -> None:
+        meta = ReceiptMetadata(
+            vendor="Amazon",
+            amount=Decimal("0"),
+            date=date(2025, 6, 15),
+            confidence=0.9,
+        )
+        assert meta.amount == Decimal("0")
 
     def test_empty_vendor_rejected(self) -> None:
         with pytest.raises(ValidationError, match="vendor"):
@@ -162,6 +162,7 @@ class TestReceipt:
             id=uuid4(),
             source_id="msg-123",
             source_type="imap",
+            source_name="test-email",
             vendor="Amazon",
             amount=Decimal("42.99"),
             currency="USD",
@@ -186,6 +187,7 @@ class TestReceipt:
             id=uuid4(),
             source_id="msg-456",
             source_type="imap",
+            source_name="test-email",
             vendor="Costco",
             amount=Decimal("157.32"),
             currency="USD",

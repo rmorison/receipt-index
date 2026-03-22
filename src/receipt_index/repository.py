@@ -14,9 +14,19 @@ if TYPE_CHECKING:
     import psycopg
 
 
-def get_processed_source_ids(conn: psycopg.Connection[dict[str, Any]]) -> set[str]:
-    """Return the set of source_ids already stored in the database."""
-    cur = conn.execute("SELECT source_id FROM receipt.receipts")
+def get_processed_source_ids(
+    conn: psycopg.Connection[dict[str, Any]],
+) -> set[str]:
+    """Return source_ids already in receipts or ingest_log (skipped/failed).
+
+    This provides full idempotency — we won't re-process messages that were
+    previously ingested, skipped (not a receipt), or failed.
+    """
+    cur = conn.execute(
+        "SELECT source_id FROM receipt.receipts "
+        "UNION "
+        "SELECT source_id FROM receipt.ingest_log"
+    )
     return {str(row["source_id"]) for row in cur.fetchall()}
 
 
@@ -25,6 +35,7 @@ def insert_receipt(
     *,
     source_id: str,
     source_type: str,
+    source_name: str,
     vendor: str,
     amount: Decimal,
     currency: str,
@@ -35,24 +46,27 @@ def insert_receipt(
     email_subject: str | None,
     email_sender: str | None,
     email_date: datetime | None,
+    file_name: str | None = None,
 ) -> Receipt:
     """Insert a receipt row and return the validated Receipt model."""
     cur = conn.execute(
         """\
         INSERT INTO receipt.receipts (
-            source_id, source_type, vendor, amount, currency,
+            source_id, source_type, source_name, vendor, amount, currency,
             receipt_date, description, confidence, pdf_path,
-            email_subject, email_sender, email_date
+            email_subject, email_sender, email_date, file_name
         ) VALUES (
-            %(source_id)s, %(source_type)s, %(vendor)s, %(amount)s, %(currency)s,
+            %(source_id)s, %(source_type)s, %(source_name)s,
+            %(vendor)s, %(amount)s, %(currency)s,
             %(receipt_date)s, %(description)s, %(confidence)s, %(pdf_path)s,
-            %(email_subject)s, %(email_sender)s, %(email_date)s
+            %(email_subject)s, %(email_sender)s, %(email_date)s, %(file_name)s
         )
         RETURNING *
         """,
         {
             "source_id": source_id,
             "source_type": source_type,
+            "source_name": source_name,
             "vendor": vendor,
             "amount": amount,
             "currency": currency,
@@ -63,6 +77,7 @@ def insert_receipt(
             "email_subject": email_subject,
             "email_sender": email_sender,
             "email_date": email_date,
+            "file_name": file_name,
         },
     )
     row = cur.fetchone()
@@ -79,6 +94,7 @@ def search_receipts(
     amount_max: Decimal | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    source_name: str | None = None,
 ) -> list[Receipt]:
     """Search receipts with optional filters, combined with AND."""
     clauses: list[str] = []
@@ -107,6 +123,10 @@ def search_receipts(
     if date_to is not None:
         clauses.append("receipt_date <= %(date_to)s")
         params["date_to"] = date_to
+
+    if source_name is not None:
+        clauses.append("source_name = %(source_name)s")
+        params["source_name"] = source_name
 
     where = " AND ".join(clauses) if clauses else "TRUE"
     sql = (

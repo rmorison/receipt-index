@@ -1,4 +1,4 @@
-"""Email-to-PDF rendering."""
+"""Receipt-to-PDF rendering."""
 
 from __future__ import annotations
 
@@ -41,6 +41,42 @@ PLAIN_TEXT_TEMPLATE = """\
 
 def render_pdf(raw: RawReceipt) -> bytes:
     """Render a RawReceipt to PDF bytes.
+
+    Routes based on source_type:
+    - "gdrive": return file directly (PDF) or convert image to PDF
+    - Otherwise: email rendering (existing path)
+    """
+    if raw.source_type == "gdrive":
+        return _render_drive_file(raw)
+    return _render_email(raw)
+
+
+def _render_drive_file(raw: RawReceipt) -> bytes:
+    """Render a Drive-sourced file to PDF.
+
+    - PDF files: return content directly (already a PDF).
+    - Image files: convert to PDF via image_to_pdf.
+    """
+    if raw.file_content is None:
+        raise ValueError("Drive-sourced receipt has no file_content")
+
+    content_type = (raw.file_content_type or "").lower()
+
+    if content_type == "application/pdf":
+        return raw.file_content
+
+    if content_type in {"image/jpeg", "image/png"}:
+        from receipt_index.image_converter import image_to_pdf
+
+        return image_to_pdf(raw.file_content)
+
+    raise ValueError(
+        f"Unsupported file content type for Drive rendering: {content_type!r}"
+    )
+
+
+def _render_email(raw: RawReceipt) -> bytes:
+    """Render an email-sourced receipt to PDF.
 
     Strategy (in order of preference):
     1. If a PDF attachment exists, return it directly

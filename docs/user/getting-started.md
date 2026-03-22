@@ -7,9 +7,10 @@ Set up Receipt Search Index from scratch and run your first ingest.
 - **Python 3.11+** — [python.org](https://www.python.org/downloads/)
 - **uv** — [docs.astral.sh/uv](https://docs.astral.sh/uv/) (Python package manager)
 - **Docker** and Docker Compose — [docker.com](https://www.docker.com/)
-- **golang-migrate** — [github.com/golang-migrate/migrate](https://github.com/golang-migrate/migrate)
 - **Anthropic API key** — [console.anthropic.com](https://console.anthropic.com/)
 - An IMAP email account with receipts in a designated folder
+
+> **Note:** golang-migrate is downloaded automatically by `make setup` — no manual install needed.
 
 ## 1. Clone and Install
 

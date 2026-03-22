@@ -15,6 +15,7 @@ from receipt_index.renderer import (
     _find_pdf_attachment,
     _html_to_pdf_bytes,
     _html_to_pdf_weasyprint,
+    _render_drive_file,
     _render_text_to_pdf,
     render_pdf,
 )
@@ -27,6 +28,8 @@ class TestRenderPdf:
         pdf_data = b"%PDF-1.4 test content"
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Receipt",
             sender="shop@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -46,6 +49,8 @@ class TestRenderPdf:
         mock_pdf.return_value = b"pdf-from-html"
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="HTML Receipt",
             sender="shop@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -60,6 +65,8 @@ class TestRenderPdf:
         mock_pdf.return_value = b"pdf-from-text"
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Text Receipt",
             sender="shop@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -73,6 +80,8 @@ class TestRenderPdf:
         mock_pdf.return_value = b"pdf-fallback"
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Empty",
             sender="x@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -84,6 +93,8 @@ class TestRenderPdf:
         pdf_data = b"%PDF-1.4 original"
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Receipt",
             sender="shop@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -203,6 +214,8 @@ class TestRenderTextToPdf:
         mock_pdf.return_value = b"pdf-bytes"
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="My Receipt",
             sender="shop@example.com",
             date=datetime(2025, 3, 15, tzinfo=UTC),
@@ -221,6 +234,8 @@ class TestRenderTextToPdf:
         mock_pdf.return_value = b"pdf-bytes"
         raw = RawReceipt(
             source_id="test",
+            source_name="test-source",
+            source_type="imap",
             subject="Test",
             sender="x@example.com",
             date=datetime(2025, 1, 1, tzinfo=UTC),
@@ -283,3 +298,106 @@ class TestHtmlToPdfWeasyprint:
         result = _html_to_pdf_weasyprint("<html><body><p>Hello</p></body></html>")
         assert isinstance(result, bytes)
         assert result[:5] == b"%PDF-"
+
+
+class TestRenderDriveFile:
+    """Tests for _render_drive_file."""
+
+    def test_pdf_passthrough(self) -> None:
+        pdf_data = b"%PDF-1.4 drive document"
+        raw = RawReceipt(
+            source_id="drive-1",
+            source_name="test-source",
+            source_type="gdrive",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            file_content=pdf_data,
+            file_content_type="application/pdf",
+        )
+        result = _render_drive_file(raw)
+        assert result == pdf_data
+
+    @patch(
+        "receipt_index.image_converter.image_to_pdf", return_value=b"%PDF-from-image"
+    )
+    def test_image_jpeg_converted(self, mock_convert: MagicMock) -> None:
+        image_data = b"\xff\xd8\xff\xe0fake-jpeg"
+        raw = RawReceipt(
+            source_id="drive-2",
+            source_name="test-source",
+            source_type="gdrive",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            file_content=image_data,
+            file_content_type="image/jpeg",
+        )
+        result = _render_drive_file(raw)
+        assert result == b"%PDF-from-image"
+        mock_convert.assert_called_once_with(image_data)
+
+    @patch("receipt_index.image_converter.image_to_pdf", return_value=b"%PDF-from-png")
+    def test_image_png_converted(self, mock_convert: MagicMock) -> None:
+        image_data = b"\x89PNGfake-png"
+        raw = RawReceipt(
+            source_id="drive-3",
+            source_name="test-source",
+            source_type="gdrive",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            file_content=image_data,
+            file_content_type="image/png",
+        )
+        result = _render_drive_file(raw)
+        assert result == b"%PDF-from-png"
+        mock_convert.assert_called_once_with(image_data)
+
+    def test_raises_without_file_content(self) -> None:
+        raw = RawReceipt(
+            source_id="drive-4",
+            source_name="test-source",
+            source_type="gdrive",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            file_content=None,
+            file_content_type="application/pdf",
+        )
+        with pytest.raises(ValueError, match="no file_content"):
+            _render_drive_file(raw)
+
+    def test_raises_for_unsupported_type(self) -> None:
+        raw = RawReceipt(
+            source_id="drive-5",
+            source_name="test-source",
+            source_type="gdrive",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            file_content=b"data",
+            file_content_type="text/plain",
+        )
+        with pytest.raises(ValueError, match="Unsupported file content type"):
+            _render_drive_file(raw)
+
+
+class TestRenderPdfDriveRouting:
+    """Tests for render_pdf routing to Drive path."""
+
+    def test_gdrive_pdf_routes_to_drive_path(self) -> None:
+        pdf_data = b"%PDF-1.4 drive pdf"
+        raw = RawReceipt(
+            source_id="drive-1",
+            source_name="test-source",
+            source_type="gdrive",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            file_content=pdf_data,
+            file_content_type="application/pdf",
+        )
+        result = render_pdf(raw)
+        assert result == pdf_data
+
+    @patch("receipt_index.image_converter.image_to_pdf", return_value=b"%PDF-converted")
+    def test_gdrive_image_routes_to_drive_path(self, _mock_convert: MagicMock) -> None:
+        raw = RawReceipt(
+            source_id="drive-2",
+            source_name="test-source",
+            source_type="gdrive",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            file_content=b"\xff\xd8\xff\xe0jpeg",
+            file_content_type="image/jpeg",
+        )
+        result = render_pdf(raw)
+        assert result == b"%PDF-converted"
