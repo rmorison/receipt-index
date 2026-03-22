@@ -69,10 +69,10 @@ def _to_extraction_result(result: Any) -> ExtractionResult:
     usage = result.usage()
     return ExtractionResult(
         metadata=result.output,
-        input_tokens=usage.input_tokens,
-        output_tokens=usage.output_tokens,
-        cache_read_tokens=usage.cache_read_tokens,
-        requests=usage.requests,
+        input_tokens=usage.input_tokens or 0,
+        output_tokens=usage.output_tokens or 0,
+        cache_read_tokens=usage.cache_read_tokens or 0,
+        requests=usage.requests or 0,
     )
 
 

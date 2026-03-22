@@ -70,6 +70,7 @@ def run_ingest(
             result.skipped += 1
             continue
 
+        extraction = None
         try:
             extraction = extract_metadata(raw, agent=agent)
             metadata = extraction.metadata
@@ -165,6 +166,15 @@ def run_ingest(
                     email_sender=raw.sender,
                     email_date=raw.date if raw.source_type == "imap" else None,
                     error_message=str(exc),
+                    llm_input_tokens=(extraction.input_tokens if extraction else None),
+                    llm_output_tokens=(
+                        extraction.output_tokens if extraction else None
+                    ),
+                    llm_cache_read_tokens=(
+                        extraction.cache_read_tokens if extraction else None
+                    ),
+                    llm_requests=(extraction.requests if extraction else None),
+                    llm_model=llm_model,
                 )
             except Exception:
                 logger.warning(

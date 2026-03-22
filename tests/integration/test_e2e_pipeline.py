@@ -348,10 +348,20 @@ class TestFullPipelineE2E:
             date=date(2025, 3, 2),
             confidence=0.85,
         )
+
+        def _mock_result(meta: ReceiptMetadata) -> MagicMock:
+            usage = MagicMock()
+            usage.input_tokens = 100
+            usage.output_tokens = 50
+            usage.cache_read_tokens = 0
+            usage.requests = 1
+            r = MagicMock()
+            r.output = meta
+            r.usage.return_value = usage
+            return r
+
         agent = MagicMock()
-        r1, r2 = MagicMock(), MagicMock()
-        r1.output, r2.output = meta1, meta2
-        agent.run_sync.side_effect = [r1, r2]
+        agent.run_sync.side_effect = [_mock_result(meta1), _mock_result(meta2)]
 
         run_ingest(
             conn=pg_conn,
