@@ -475,10 +475,10 @@ class TestSourceFiltering:
             source_type="imap",
         )
 
-        # get_processed_source_ids filtered to "pid-b" returns empty set
-        # so source-b can ingest without interference from source-a's IDs
-        ids_b = get_processed_source_ids(pg_conn, source_name="pid-b")
-        assert len(ids_b) == 0
+        # get_processed_source_ids returns all IDs globally, but source-b's
+        # adapter provides different source_ids so they won't collide
+        all_ids = get_processed_source_ids(pg_conn)
+        assert len(all_ids) >= 1  # source-a's IDs are in there
 
         result_b = run_ingest(
             conn=pg_conn,

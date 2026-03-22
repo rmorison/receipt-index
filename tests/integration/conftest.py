@@ -31,7 +31,7 @@ _DB_DSN = (
 def _run_migrations(conn: psycopg.Connection[dict[str, Any]]) -> None:
     """Apply migrations inline so tests don't need golang-migrate.
 
-    Mirrors: public/000001, receipt/000001-000004.
+    Mirrors: public/000001, receipt/000001-000007.
     Keep in sync with db/migrations/ when schema changes.
     """
     # public/000001 — set_updated_at trigger function
@@ -74,7 +74,7 @@ def _run_migrations(conn: psycopg.Connection[dict[str, Any]]) -> None:
 
             CONSTRAINT pk_receipts PRIMARY KEY (id),
             CONSTRAINT uq_receipts_source_id UNIQUE (source_id),
-            CONSTRAINT ck_receipts_amount_positive CHECK (amount > 0),
+            CONSTRAINT ck_receipts_amount_non_negative CHECK (amount >= 0),
             CONSTRAINT ck_receipts_confidence_range
                 CHECK (confidence >= 0 AND confidence <= 1)
         )
@@ -113,6 +113,11 @@ def _run_migrations(conn: psycopg.Connection[dict[str, Any]]) -> None:
             email_sender    TEXT,
             email_date      TIMESTAMPTZ,
             error_message   TEXT,
+            llm_input_tokens   INTEGER,
+            llm_output_tokens  INTEGER,
+            llm_cache_read_tokens INTEGER,
+            llm_requests       INTEGER,
+            llm_model          TEXT,
             created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
             CONSTRAINT pk_ingest_log PRIMARY KEY (id),
