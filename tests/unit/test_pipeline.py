@@ -8,7 +8,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
-from receipt_index.models import RawReceipt, Receipt, ReceiptMetadata
+from receipt_index.models import ExtractionResult, RawReceipt, Receipt, ReceiptMetadata
 from receipt_index.pipeline import IngestResult, run_ingest
 
 _RECEIPT_ROW: dict[str, Any] = {
@@ -33,13 +33,19 @@ _RECEIPT_ROW: dict[str, Any] = {
 
 _SAMPLE_RECEIPT = Receipt.model_validate(_RECEIPT_ROW)
 
-_SAMPLE_METADATA = ReceiptMetadata(
-    vendor="Amazon",
-    amount=Decimal("42.99"),
-    currency="USD",
-    date=date(2025, 6, 15),
-    description="Python Cookbook",
-    confidence=0.95,
+_SAMPLE_METADATA = ExtractionResult(
+    metadata=ReceiptMetadata(
+        vendor="Amazon",
+        amount=Decimal("42.99"),
+        currency="USD",
+        date=date(2025, 6, 15),
+        description="Python Cookbook",
+        confidence=0.95,
+    ),
+    input_tokens=150,
+    output_tokens=50,
+    cache_read_tokens=0,
+    requests=1,
 )
 
 

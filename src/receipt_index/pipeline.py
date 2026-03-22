@@ -45,6 +45,7 @@ def run_ingest(
     source_name: str,
     source_type: str,
     agent: Agent[None, ReceiptMetadata] | None = None,
+    llm_model: str | None = None,
     dry_run: bool = False,
     limit: int | None = None,
 ) -> IngestResult:
@@ -70,7 +71,8 @@ def run_ingest(
             continue
 
         try:
-            metadata = extract_metadata(raw, agent=agent)
+            extraction = extract_metadata(raw, agent=agent)
+            metadata = extraction.metadata
 
             # Skip non-receipts based on low LLM confidence only.
             # amount == 0 is valid (e.g. prepaid postage receipts).
@@ -95,6 +97,11 @@ def run_ingest(
                     email_sender=raw.sender,
                     email_date=raw.date if raw.source_type == "imap" else None,
                     error_message=f"Skipped: {reason}",
+                    llm_input_tokens=extraction.input_tokens,
+                    llm_output_tokens=extraction.output_tokens,
+                    llm_cache_read_tokens=extraction.cache_read_tokens,
+                    llm_requests=extraction.requests,
+                    llm_model=llm_model,
                 )
                 result.skipped += 1
                 continue
@@ -133,6 +140,11 @@ def run_ingest(
                 email_subject=raw.subject,
                 email_sender=raw.sender,
                 email_date=raw.date if raw.source_type == "imap" else None,
+                llm_input_tokens=extraction.input_tokens,
+                llm_output_tokens=extraction.output_tokens,
+                llm_cache_read_tokens=extraction.cache_read_tokens,
+                llm_requests=extraction.requests,
+                llm_model=llm_model,
             )
             logger.info(
                 "Processed receipt: %s (%s) confidence=%.2f",

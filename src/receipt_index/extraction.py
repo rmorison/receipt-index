@@ -8,7 +8,12 @@ from typing import Any
 
 from pydantic_ai import Agent, BinaryContent
 
-from receipt_index.models import Attachment, RawReceipt, ReceiptMetadata
+from receipt_index.models import (
+    Attachment,
+    ExtractionResult,
+    RawReceipt,
+    ReceiptMetadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +63,19 @@ assume USD.\
 # Matches the threshold used in pdf_reader.py.
 _MIN_TEXT_LENGTH = 20
 
+
+def _to_extraction_result(result: Any) -> ExtractionResult:
+    """Convert a pydantic-ai AgentRunResult to an ExtractionResult."""
+    usage = result.usage()
+    return ExtractionResult(
+        metadata=result.output,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        requests=usage.requests,
+    )
+
+
 _IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png"})
 
 
@@ -79,14 +97,14 @@ def extract_metadata(
     raw: RawReceipt,
     *,
     agent: Agent[None, ReceiptMetadata] | None = None,
-) -> ReceiptMetadata:
+) -> ExtractionResult:
     """Extract structured metadata from a raw receipt.
 
     Routes to the appropriate extraction path based on ``raw.source_type``:
     - ``"gdrive"``: document-based extraction (vision or PDF text)
     - Otherwise: email-based extraction (existing path)
 
-    Accepts an optional agent for dependency injection in tests.
+    Returns an ExtractionResult with metadata and LLM usage info.
     """
     if raw.source_type == "gdrive":
         return _extract_from_document(raw, agent=agent)
@@ -97,7 +115,7 @@ def _extract_from_email(
     raw: RawReceipt,
     *,
     agent: Agent[None, ReceiptMetadata] | None = None,
-) -> ReceiptMetadata:
+) -> ExtractionResult:
     """Extract metadata from an email-sourced receipt."""
     if agent is None:
         msg = "No extraction agent provided."
@@ -106,14 +124,14 @@ def _extract_from_email(
     pdf_text = _extract_pdf_text(raw.attachments)
     prompt = _build_prompt(raw, pdf_text=pdf_text)
     result: Any = agent.run_sync(prompt)
-    return result.output  # type: ignore[no-any-return]
+    return _to_extraction_result(result)
 
 
 def _extract_from_document(
     raw: RawReceipt,
     *,
     agent: Agent[None, ReceiptMetadata] | None = None,
-) -> ReceiptMetadata:
+) -> ExtractionResult:
     """Extract metadata from a Drive-sourced document (PDF or image).
 
     For PDFs: extract text first; if insufficient, fall back to vision.
@@ -143,7 +161,7 @@ def _extract_from_pdf_document(
     pdf_bytes: bytes,
     *,
     agent: Agent[None, ReceiptMetadata],
-) -> ReceiptMetadata:
+) -> ExtractionResult:
     """Extract metadata from a PDF document.
 
     Tries text extraction first. If the text is insufficient (< 20 non-whitespace
@@ -158,7 +176,7 @@ def _extract_from_pdf_document(
         result: Any = agent.run_sync(
             f"Extract receipt metadata from this document text:\n\n{text}"
         )
-        return result.output  # type: ignore[no-any-return]
+        return _to_extraction_result(result)
 
     logger.info(
         "PDF text extraction insufficient (%d non-ws chars), using vision",
@@ -170,7 +188,7 @@ def _extract_from_pdf_document(
             BinaryContent(data=pdf_bytes, media_type="application/pdf"),
         ]
     )
-    return result.output  # type: ignore[no-any-return]
+    return _to_extraction_result(result)
 
 
 def _extract_from_image(
@@ -178,7 +196,7 @@ def _extract_from_image(
     content_type: str,
     *,
     agent: Agent[None, ReceiptMetadata],
-) -> ReceiptMetadata:
+) -> ExtractionResult:
     """Extract metadata from an image file by sending it to the LLM via vision."""
     result: Any = agent.run_sync(
         [
@@ -186,7 +204,7 @@ def _extract_from_image(
             BinaryContent(data=image_data, media_type=content_type),
         ]
     )
-    return result.output  # type: ignore[no-any-return]
+    return _to_extraction_result(result)
 
 
 def _has_sufficient_text(text: str) -> bool:

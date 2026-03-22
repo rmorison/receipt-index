@@ -55,6 +55,17 @@ class ReceiptMetadata(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+@dataclass
+class ExtractionResult:
+    """Metadata plus LLM usage from an extraction run."""
+
+    metadata: ReceiptMetadata
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    requests: int = 0
+
+
 class Receipt(BaseModel):
     """Full receipt record as stored in the database."""
 
@@ -91,4 +102,9 @@ class IngestLogEntry(BaseModel):
     email_sender: str | None
     email_date: datetime | None
     error_message: str | None
+    llm_input_tokens: int | None = None
+    llm_output_tokens: int | None = None
+    llm_cache_read_tokens: int | None = None
+    llm_requests: int | None = None
+    llm_model: str | None = None
     created_at: datetime
