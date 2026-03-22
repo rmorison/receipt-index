@@ -43,7 +43,7 @@ def run_ingest(
     adapter: SourceAdapter,
     store: FileStore,
     source_name: str,
-    source_type: str = "imap",
+    source_type: str,
     agent: Agent[None, ReceiptMetadata] | None = None,
     dry_run: bool = False,
     limit: int | None = None,
@@ -118,6 +118,7 @@ def run_ingest(
                 email_subject=raw.subject,
                 email_sender=raw.sender,
                 email_date=raw.date if raw.source_type == "imap" else None,
+                file_name=raw.file_name,
             )
             result.processed += 1
             result.receipts.append(receipt)

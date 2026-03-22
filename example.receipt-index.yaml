@@ -27,8 +27,7 @@ sources:
   # - name: scanned-receipts
   #   type: gdrive
   #   folder_id: "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
-  #   credentials_json: ${GDRIVE_CREDENTIALS_JSON}  # OAuth client config JSON
-  #   token_json: ${GDRIVE_TOKEN_JSON}              # OAuth refresh token JSON
+  #   token_json: ${GDRIVE_TOKEN_JSON}              # from: receipt-index auth gdrive
 
 # ---------------------------------------------------------------------------
 # Database — PostgreSQL connection

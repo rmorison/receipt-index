@@ -17,14 +17,6 @@ def _make_gdrive_config(
     folder_id: str = "folder_abc123",
 ) -> GdriveSourceConfig:
     """Build a GdriveSourceConfig with fake credential JSON."""
-    credentials_json = json.dumps(
-        {
-            "installed": {
-                "client_id": "test-client-id",
-                "client_secret": "test-client-secret",  # pragma: allowlist secret
-            }
-        }
-    )
     token_json = json.dumps(
         {
             "token": "fake-access-token",
@@ -36,7 +28,6 @@ def _make_gdrive_config(
     return GdriveSourceConfig(
         name=name,
         folder_id=folder_id,
-        credentials_json=credentials_json,
         token_json=token_json,
     )
 

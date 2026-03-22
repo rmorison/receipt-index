@@ -65,7 +65,7 @@ def _render_drive_file(raw: RawReceipt) -> bytes:
     if content_type == "application/pdf":
         return raw.file_content
 
-    if content_type.startswith("image/"):
+    if content_type in {"image/jpeg", "image/png"}:
         from receipt_index.image_converter import image_to_pdf
 
         return image_to_pdf(raw.file_content)

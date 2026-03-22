@@ -33,7 +33,7 @@ For multi-item orders, use the total amount. If the currency is not stated, \
 assume USD.\
 """
 
-_DOCUMENT_SYSTEM_PROMPT = """\
+DOCUMENT_SYSTEM_PROMPT = """\
 You are a receipt metadata extractor. Given a receipt document (scanned image \
 or PDF), extract the following fields:
 

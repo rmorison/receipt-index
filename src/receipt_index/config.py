@@ -81,7 +81,6 @@ class GdriveSourceConfig(BaseModel):
     name: str = Field(min_length=1, pattern=r"^[a-z0-9][a-z0-9-]*$")
     type: Literal["gdrive"] = "gdrive"
     folder_id: str
-    credentials_json: str
     token_json: str
 
 
@@ -186,12 +185,7 @@ def _interpolate_env_vars(data: Any) -> Any:
 
     result = _walk(data)
     if all_missing:
-        seen: set[str] = set()
-        unique: list[str] = []
-        for var in all_missing:
-            if var not in seen:
-                seen.add(var)
-                unique.append(var)
+        unique = list(dict.fromkeys(all_missing))
         raise ConfigError(f"Environment variable(s) not set: {', '.join(unique)}")
     return result
 

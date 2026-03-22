@@ -32,7 +32,7 @@ def _parse_drive_date(date_str: str) -> datetime:
 
     Google Drive returns timestamps like '2024-01-15T10:30:00.000Z'.
     """
-    # Handle fractional seconds by stripping them before parsing
+    # Replace Z suffix with +00:00 for fromisoformat compatibility
     cleaned = date_str.replace("Z", "+00:00")
     return datetime.fromisoformat(cleaned).astimezone(UTC)
 

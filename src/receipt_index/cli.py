@@ -99,10 +99,17 @@ def ingest(
 
     store = LocalFileStore(Path(config.store.path).resolve())
 
-    # Create extraction agent once for all sources
-    agent = create_extraction_agent(
+    # Create extraction agents — email and document prompts differ
+    from receipt_index.extraction import DOCUMENT_SYSTEM_PROMPT
+
+    email_agent = create_extraction_agent(
         api_key=config.llm.api_key,
         model=config.llm.model,
+    )
+    document_agent = create_extraction_agent(
+        api_key=config.llm.api_key,
+        model=config.llm.model,
+        system_prompt=DOCUMENT_SYSTEM_PROMPT,
     )
 
     totals = IngestResult()
@@ -111,10 +118,12 @@ def ingest(
     for source_config in sources:
         if isinstance(source_config, ImapSourceConfig):
             adapter: SourceAdapter = ImapAdapter(source_config)
+            agent = email_agent
         elif isinstance(source_config, GdriveSourceConfig):
             from receipt_index.adapters.gdrive import GdriveAdapter
 
             adapter = GdriveAdapter(source_config)
+            agent = document_agent
         else:
             logger.warning("Unknown source type, skipping %r", source_config.name)
             continue

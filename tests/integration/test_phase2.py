@@ -741,18 +741,6 @@ class TestGdriveAdapterMocked:
         """Return a GdriveSourceConfig with dummy credentials."""
         from receipt_index.config import GdriveSourceConfig
 
-        # Minimal valid OAuth JSON stubs (structure matters, not values)
-        credentials_json = json.dumps(
-            {
-                "installed": {
-                    "client_id": "test-client-id.apps.googleusercontent.com",
-                    "client_secret": "test-secret",  # pragma: allowlist secret
-                    "redirect_uris": ["http://localhost"],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
-            }
-        )
         token_json = json.dumps(
             {
                 "token": "ya29.test-access-token",
@@ -768,7 +756,6 @@ class TestGdriveAdapterMocked:
             name="scanned-receipts",
             type="gdrive",
             folder_id="1aBcDeFgHiJkLmNoPqRsTuVwXyZ",
-            credentials_json=credentials_json,
             token_json=token_json,
         )
 
@@ -1379,7 +1366,6 @@ class TestLoadConfigIntegration:
                   - name: scanned-receipts
                     type: gdrive
                     folder_id: "1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
-                    credentials_json: '{"installed": {}}'
                     token_json: '{"token": "tok"}'
 
                 database:

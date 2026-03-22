@@ -279,7 +279,6 @@ class TestIngestCommand:
             name="scanned-receipts",
             type="gdrive",
             folder_id="abc123",
-            credentials_json="{}",
             token_json="{}",
         )
         config_with_gdrive = config.model_copy(update={"sources": [gdrive_source]})

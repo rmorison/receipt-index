@@ -101,7 +101,11 @@ class TestRunIngest:
         store = _mock_store()
 
         result = run_ingest(
-            conn=conn, adapter=adapter, store=store, source_name="test-imap"
+            conn=conn,
+            adapter=adapter,
+            store=store,
+            source_name="test-imap",
+            source_type="imap",
         )
 
         assert result.processed == 1
@@ -127,6 +131,7 @@ class TestRunIngest:
             adapter=adapter,
             store=store,
             source_name="test-imap",
+            source_type="imap",
             dry_run=True,
         )
 
@@ -157,6 +162,7 @@ class TestRunIngest:
             adapter=adapter,
             store=store,
             source_name="test-imap",
+            source_type="imap",
             limit=2,
         )
 
@@ -179,7 +185,11 @@ class TestRunIngest:
         store = _mock_store()
 
         result = run_ingest(
-            conn=conn, adapter=adapter, store=store, source_name="test-imap"
+            conn=conn,
+            adapter=adapter,
+            store=store,
+            source_name="test-imap",
+            source_type="imap",
         )
 
         assert result.failed == 2
@@ -212,6 +222,7 @@ class TestRunIngest:
             adapter=adapter,
             store=store,
             source_name="test-imap",
+            source_type="imap",
             agent=mock_agent,
         )
 
