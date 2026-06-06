@@ -7,6 +7,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic_ai import BinaryContent
 
 from receipt_index.extraction import (
     _build_prompt,
@@ -470,3 +471,94 @@ class TestExtractFromDocument:
 
         call_args = agent.run_sync.call_args[0][0]
         assert isinstance(call_args, list)
+
+
+class TestEmailImageAttachments:
+    """Tests for image-attachment handling in the email extraction path."""
+
+    def _mock_agent(self) -> MagicMock:
+        mock_result = _mock_agent_result(
+            ReceiptMetadata(
+                vendor="Dan Ming",
+                amount=Decimal("3500.00"),
+                date=date(2026, 6, 6),
+                confidence=0.95,
+            )
+        )
+        agent = MagicMock()
+        agent.run_sync.return_value = mock_result
+        return agent
+
+    def _raw(self, attachments: list[Attachment]) -> RawReceipt:
+        return RawReceipt(
+            source_id="msg-1",
+            source_name="personal-email",
+            source_type="imap",
+            date=datetime(2026, 6, 6, tzinfo=UTC),
+            subject="Screenshot 2026-06-06 at 12.02.34 PM",
+            sender="rod@morison.io",
+            attachments=attachments,
+        )
+
+    def test_image_attachment_sent_to_vision(self) -> None:
+        raw = self._raw(
+            [Attachment(filename="shot.png", content_type="image/png", data=b"\x89PNG")]
+        )
+        agent = self._mock_agent()
+        result = extract_metadata(raw, agent=agent)
+
+        assert result.metadata.vendor == "Dan Ming"
+        # Image present → message is a list with the text prompt plus binary image
+        message = agent.run_sync.call_args[0][0]
+        assert isinstance(message, list)
+        assert isinstance(message[0], str)
+        assert "Subject: Screenshot" in message[0]
+        binaries = [m for m in message if isinstance(m, BinaryContent)]
+        assert len(binaries) == 1
+        assert binaries[0].media_type == "image/png"
+
+    def test_content_type_with_params_is_normalized(self) -> None:
+        raw = self._raw(
+            [
+                Attachment(
+                    filename="s.png", content_type="image/PNG; name=s.png", data=b"x"
+                )
+            ]
+        )
+        agent = self._mock_agent()
+        extract_metadata(raw, agent=agent)
+
+        message = agent.run_sync.call_args[0][0]
+        binaries = [m for m in message if isinstance(m, BinaryContent)]
+        assert len(binaries) == 1
+        assert binaries[0].media_type == "image/png"
+
+    def test_multiple_images_all_sent(self) -> None:
+        raw = self._raw(
+            [
+                Attachment(filename="a.png", content_type="image/png", data=b"a"),
+                Attachment(filename="b.jpg", content_type="image/jpeg", data=b"b"),
+            ]
+        )
+        agent = self._mock_agent()
+        extract_metadata(raw, agent=agent)
+
+        message = agent.run_sync.call_args[0][0]
+        binaries = [m for m in message if isinstance(m, BinaryContent)]
+        assert len(binaries) == 2
+
+    def test_no_image_attachments_sends_string(self) -> None:
+        raw = RawReceipt(
+            source_id="msg-2",
+            source_name="personal-email",
+            source_type="imap",
+            date=datetime(2026, 6, 6, tzinfo=UTC),
+            subject="Receipt",
+            sender="shop@example.com",
+            text_body="Total: $10.00",
+        )
+        agent = self._mock_agent()
+        extract_metadata(raw, agent=agent)
+
+        message = agent.run_sync.call_args[0][0]
+        assert isinstance(message, str)
