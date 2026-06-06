@@ -84,7 +84,7 @@ def _to_extraction_result(result: Any) -> ExtractionResult:
     )
 
 
-_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png"})
+_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
 
 
 def create_extraction_agent(
@@ -167,7 +167,7 @@ def _extract_from_document(
     if raw.file_content is None:
         raise ValueError("Drive-sourced receipt has no file_content")
 
-    content_type = (raw.file_content_type or "").lower()
+    content_type = _base_content_type(raw.file_content_type or "")
 
     if content_type == "application/pdf":
         return _extract_from_pdf_document(raw.file_content, agent=agent)

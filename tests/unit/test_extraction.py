@@ -534,10 +534,13 @@ class TestEmailImageAttachments:
         assert binaries[0].media_type == "image/png"
 
     def test_multiple_images_all_sent(self) -> None:
+        # Also exercises gif/webp support beyond png/jpeg.
         raw = self._raw(
             [
                 Attachment(filename="a.png", content_type="image/png", data=b"a"),
                 Attachment(filename="b.jpg", content_type="image/jpeg", data=b"b"),
+                Attachment(filename="c.gif", content_type="image/gif", data=b"c"),
+                Attachment(filename="d.webp", content_type="image/webp", data=b"d"),
             ]
         )
         agent = self._mock_agent()
@@ -545,7 +548,31 @@ class TestEmailImageAttachments:
 
         message = agent.run_sync.call_args[0][0]
         binaries = [m for m in message if isinstance(m, BinaryContent)]
-        assert len(binaries) == 2
+        assert len(binaries) == 4
+
+    @patch(
+        "receipt_index.pdf_reader.extract_text",
+        return_value="Vendor: Shop Total: $25",
+    )
+    def test_pdf_and_image_combined(self, _mock_extract: MagicMock) -> None:
+        raw = self._raw(
+            [
+                Attachment(
+                    filename="r.pdf", content_type="application/pdf", data=b"%PDF"
+                ),
+                Attachment(filename="s.png", content_type="image/png", data=b"\x89PNG"),
+            ]
+        )
+        agent = self._mock_agent()
+        extract_metadata(raw, agent=agent)
+
+        message = agent.run_sync.call_args[0][0]
+        assert isinstance(message, list)
+        # PDF text still rides in the text prompt at message[0]...
+        assert "Vendor: Shop Total: $25" in message[0]
+        # ...and the image is still sent to vision.
+        binaries = [m for m in message if isinstance(m, BinaryContent)]
+        assert len(binaries) == 1
 
     def test_no_image_attachments_sends_string(self) -> None:
         raw = RawReceipt(
