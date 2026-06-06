@@ -33,6 +33,14 @@ If PDF attachment content is provided below the email body, use it as additional
 context for extraction. The PDF content often contains the detailed receipt with \
 amounts and line items that may not appear in the email body.
 
+If image attachments are provided, they are likely a screenshot or photo of the \
+receipt itself (the email body may be empty) — extract the receipt details from \
+the image.
+
+Payment confirmations (Zelle, Venmo, PayPal, bank transfers, wire transfers) are \
+valid receipts; the vendor is the payment recipient. Use high confidence when the \
+amount, recipient, and date are clearly visible.
+
 Handle forwarded receipts by looking at the original receipt content. \
 For multi-item orders, use the total amount. If the currency is not stated, \
 assume USD.\
@@ -76,7 +84,7 @@ def _to_extraction_result(result: Any) -> ExtractionResult:
     )
 
 
-_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png"})
+_IMAGE_CONTENT_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp"})
 
 
 def create_extraction_agent(
@@ -123,7 +131,22 @@ def _extract_from_email(
 
     pdf_text = _extract_pdf_text(raw.attachments)
     prompt = _build_prompt(raw, pdf_text=pdf_text)
-    result: Any = agent.run_sync(prompt)
+
+    images = _image_attachments(raw.attachments)
+    if images:
+        # Send image attachments (e.g. screenshot receipts) to vision alongside
+        # the email text context. The IMAP body is often empty for these.
+        message: list[Any] = [prompt]
+        for att in images:
+            message.append(
+                BinaryContent(
+                    data=att.data,
+                    media_type=_base_content_type(att.content_type),
+                )
+            )
+        result: Any = agent.run_sync(message)
+    else:
+        result = agent.run_sync(prompt)
     return _to_extraction_result(result)
 
 
@@ -144,7 +167,7 @@ def _extract_from_document(
     if raw.file_content is None:
         raise ValueError("Drive-sourced receipt has no file_content")
 
-    content_type = (raw.file_content_type or "").lower()
+    content_type = _base_content_type(raw.file_content_type or "")
 
     if content_type == "application/pdf":
         return _extract_from_pdf_document(raw.file_content, agent=agent)
@@ -243,10 +266,24 @@ def _extract_pdf_text(attachments: list[Attachment]) -> str | None:
     from receipt_index.pdf_reader import extract_text
 
     for att in attachments:
-        if att.content_type.lower() == "application/pdf":
+        if _base_content_type(att.content_type) == "application/pdf":
             text = extract_text(att.data)
             return text if text else None
     return None
+
+
+def _base_content_type(content_type: str) -> str:
+    """Normalize a MIME type to its lowercase base (no parameters)."""
+    return content_type.split(";")[0].strip().lower()
+
+
+def _image_attachments(attachments: list[Attachment]) -> list[Attachment]:
+    """Return attachments whose content type is a supported image."""
+    return [
+        att
+        for att in attachments
+        if _base_content_type(att.content_type) in _IMAGE_CONTENT_TYPES
+    ]
 
 
 def _strip_html_tags(html: str) -> str:
