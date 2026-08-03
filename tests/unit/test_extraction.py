@@ -479,7 +479,7 @@ class TestEmailImageAttachments:
     def _mock_agent(self) -> MagicMock:
         mock_result = _mock_agent_result(
             ReceiptMetadata(
-                vendor="Dan Ming",
+                vendor="Acme Property Management",
                 amount=Decimal("3500.00"),
                 date=date(2026, 6, 6),
                 confidence=0.95,
@@ -496,7 +496,7 @@ class TestEmailImageAttachments:
             source_type="imap",
             date=datetime(2026, 6, 6, tzinfo=UTC),
             subject="Screenshot 2026-06-06 at 12.02.34 PM",
-            sender="rod@morison.io",
+            sender="user@example.com",
             attachments=attachments,
         )
 
@@ -507,7 +507,7 @@ class TestEmailImageAttachments:
         agent = self._mock_agent()
         result = extract_metadata(raw, agent=agent)
 
-        assert result.metadata.vendor == "Dan Ming"
+        assert result.metadata.vendor == "Acme Property Management"
         # Image present → message is a list with the text prompt plus binary image
         message = agent.run_sync.call_args[0][0]
         assert isinstance(message, list)
