@@ -1,4 +1,12 @@
-"""Receipt-to-PDF rendering."""
+"""Receipt-to-PDF rendering.
+
+Receipt HTML is untrusted third-party content rendered unattended, so both
+rendering engines run with network egress blocked: only inline resources
+(``data:`` URIs embedded in the document) are served and every remote
+reference is refused. This removes the exfiltration path a renderer exploit
+would need, and makes PDFs deterministic — no remote images or trackers are
+fetched at render time.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +15,24 @@ import html
 import logging
 import os
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 if TYPE_CHECKING:
+    from playwright.sync_api import Route
+
     from receipt_index.models import Attachment, RawReceipt
 
 logger = logging.getLogger(__name__)
+
+#: URL schemes whose payload travels with the document — fetching them causes
+#: no network or filesystem I/O. Everything else (http, https, file, ftp,
+#: protocol-relative and relative references) counts as remote.
+INLINE_URL_SCHEMES = frozenset({"data", "about", "blob"})
+
+
+class RemoteResourceBlockedError(Exception):
+    """Raised when a render attempts to fetch a non-inline resource."""
 
 
 PLAIN_TEXT_TEMPLATE = """\
@@ -168,8 +188,71 @@ def _html_to_pdf_bytes(html_content: str) -> bytes:
     return _html_to_pdf_weasyprint(html_content)
 
 
+def _is_inline_url(url: str) -> bool:
+    """Report whether a URL can be served without leaving the render process.
+
+    Args:
+        url: URL a rendering engine is about to fetch.
+
+    Returns:
+        True for inline schemes (see :data:`INLINE_URL_SCHEMES`), False for
+        every remote or ambiguous reference.
+    """
+    return urlsplit(url).scheme.lower() in INLINE_URL_SCHEMES
+
+
+def _block_remote_requests(route: Route) -> None:
+    """Playwright route handler that aborts every non-inline request.
+
+    Aborting rather than stalling matters: a blocked resource fails
+    immediately, so the page finishes rendering instead of waiting out a
+    network timeout.
+
+    Args:
+        route: Intercepted Playwright route for a request made by the page.
+    """
+    url = route.request.url
+    if _is_inline_url(url):
+        route.continue_()
+        return
+    logger.debug("Blocked remote request during render: %s", url)
+    route.abort()
+
+
+def _inline_only_url_fetcher(url: str) -> Any:
+    """Serve inline URLs for weasyprint and refuse remote ones.
+
+    Args:
+        url: URL weasyprint wants to fetch.
+
+    Returns:
+        A weasyprint URL fetcher response for inline URLs.
+
+    Raises:
+        RemoteResourceBlockedError: If the URL is not inline. weasyprint
+            converts fetcher exceptions into a non-fatal ``URLFetchingError``,
+            so the render continues with the resource missing.
+    """
+    if not _is_inline_url(url):
+        logger.debug("Blocked remote resource during render: %s", url)
+        raise RemoteResourceBlockedError(f"Remote resource blocked: {url}")
+
+    try:
+        from weasyprint.urls import URLFetcher
+    except ImportError:  # weasyprint < 68
+        from weasyprint.urls import default_url_fetcher
+
+        return default_url_fetcher(url)
+
+    return URLFetcher(allowed_protocols=INLINE_URL_SCHEMES).fetch(url)
+
+
 def _html_to_pdf_playwright(html_content: str) -> bytes:
-    """Convert HTML string to PDF bytes via Playwright headless Chromium."""
+    """Convert HTML string to PDF bytes via Playwright headless Chromium.
+
+    Every request the document makes is intercepted; non-inline requests are
+    aborted before they reach the network.
+    """
     from playwright.sync_api import sync_playwright
 
     # Ensure PLAYWRIGHT_BROWSERS_PATH is set for local installs
@@ -179,7 +262,12 @@ def _html_to_pdf_playwright(html_content: str) -> bytes:
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
-            page = browser.new_page()
+            # JS off: email HTML never legitimately needs scripts (mail clients
+            # do not run them), and route() cannot intercept WebSockets that
+            # script could open — disabling JS closes that egress gap outright.
+            context = browser.new_context(java_script_enabled=False)
+            context.route("**/*", _block_remote_requests)
+            page = context.new_page()
             page.set_content(html_content, wait_until="domcontentloaded")
             pdf_bytes: bytes = page.pdf(format="Letter")
             return pdf_bytes
@@ -188,8 +276,12 @@ def _html_to_pdf_playwright(html_content: str) -> bytes:
 
 
 def _html_to_pdf_weasyprint(html_content: str) -> bytes:
-    """Convert HTML string to PDF bytes via weasyprint."""
+    """Convert HTML string to PDF bytes via weasyprint.
+
+    Uses an inline-only URL fetcher so remote references are refused rather
+    than fetched, matching the Playwright path.
+    """
     import weasyprint
 
-    doc = weasyprint.HTML(string=html_content)
+    doc = weasyprint.HTML(string=html_content, url_fetcher=_inline_only_url_fetcher)
     return doc.write_pdf()  # type: ignore[no-any-return]

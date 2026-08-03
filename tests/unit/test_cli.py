@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import textwrap
+from collections.abc import Iterator  # noqa: TC003
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path  # noqa: TC003
@@ -15,7 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 from receipt_index.cli import cli
-from receipt_index.config import AppConfig, ImapSourceConfig
+from receipt_index.config import AppConfig, ImapSourceConfig, LoggingConfig
 from receipt_index.models import IngestLogEntry, Receipt
 from receipt_index.pipeline import IngestResult
 
@@ -80,6 +82,40 @@ _MINIMAL_CONFIG_YAML = textwrap.dedent("""\
     logging:
       level: INFO
 """)
+
+
+_NOISY_LOGGERS = ("pdfminer", "fontTools", "PIL")
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+
+@pytest.fixture(autouse=True)
+def isolated_logging() -> Iterator[None]:
+    """Give every test an unconfigured root logger, restoring global state after.
+
+    Logger levels and handlers are process-global, and ``logging.basicConfig``
+    is a no-op once the root logger has handlers (pytest installs its own), so
+    the root logger is emptied for the duration of the test. Autouse because
+    ``_configure_logging`` runs ``basicConfig(force=True)`` on every CLI
+    invocation — any test driving a command mutates global logging state and
+    must have it restored, not just the logging-focused tests.
+    """
+    tracked = (*_NOISY_LOGGERS, "receipt_index")
+    root = logging.getLogger()
+    saved_handlers = root.handlers[:]
+    saved_root_level = root.level
+    saved_levels = {name: logging.getLogger(name).level for name in tracked}
+
+    root.handlers = []
+    root.setLevel(logging.WARNING)
+    for name in tracked:
+        logging.getLogger(name).setLevel(logging.NOTSET)
+    try:
+        yield
+    finally:
+        root.handlers = saved_handlers
+        root.setLevel(saved_root_level)
+        for name, level in saved_levels.items():
+            logging.getLogger(name).setLevel(level)
 
 
 @pytest.fixture()
@@ -658,6 +694,98 @@ class TestShowCommand:
         )
         assert result.exit_code != 0
         assert "not found" in result.output
+
+
+class TestLoggingSetup:
+    """Tests for CLI logging configuration."""
+
+    @patch("receipt_index.repository.search_receipts", return_value=[])
+    @patch("receipt_index.db.get_connection")
+    @patch("receipt_index.cli.load_config")
+    def test_noisy_libraries_clamped_at_info(
+        self,
+        mock_load_config: MagicMock,
+        mock_conn: MagicMock,
+        mock_search: MagicMock,
+        config_file: Path,
+        isolated_logging: None,
+    ) -> None:
+        """At app level INFO, pdfminer/fontTools/PIL are held at WARNING."""
+        mock_load_config.return_value = _make_config()
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--config", str(config_file), "search"])
+        assert result.exit_code == 0, result.output
+        for name in _NOISY_LOGGERS:
+            assert logging.getLogger(name).getEffectiveLevel() == logging.WARNING
+
+    @patch("receipt_index.repository.search_receipts", return_value=[])
+    @patch("receipt_index.db.get_connection")
+    @patch("receipt_index.cli.load_config")
+    def test_noisy_libraries_clamped_at_debug(
+        self,
+        mock_load_config: MagicMock,
+        mock_conn: MagicMock,
+        mock_search: MagicMock,
+        config_file: Path,
+        isolated_logging: None,
+    ) -> None:
+        """At app level DEBUG, app loggers emit DEBUG but libraries stay quiet."""
+        config = _make_config().model_copy(
+            update={"logging": LoggingConfig(level="DEBUG")}
+        )
+        mock_load_config.return_value = config
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--config", str(config_file), "search"])
+        assert result.exit_code == 0, result.output
+
+        assert logging.getLogger("receipt_index").getEffectiveLevel() == logging.DEBUG
+        assert (
+            logging.getLogger("receipt_index.pipeline").getEffectiveLevel()
+            == logging.DEBUG
+        )
+        for name in _NOISY_LOGGERS:
+            assert logging.getLogger(name).getEffectiveLevel() == logging.WARNING
+            assert not logging.getLogger(name).isEnabledFor(logging.INFO)
+
+    @patch("receipt_index.repository.search_receipts", return_value=[])
+    @patch("receipt_index.db.get_connection")
+    @patch("receipt_index.cli.load_config")
+    def test_app_logging_level_and_format_unchanged(
+        self,
+        mock_load_config: MagicMock,
+        mock_conn: MagicMock,
+        mock_search: MagicMock,
+        config_file: Path,
+        isolated_logging: None,
+    ) -> None:
+        """receipt_index.* loggers keep the configured level and log format."""
+        mock_load_config.return_value = _make_config()
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--config", str(config_file), "search"])
+        assert result.exit_code == 0, result.output
+
+        app_logger = logging.getLogger("receipt_index")
+        assert app_logger.level == logging.NOTSET  # not clamped explicitly
+        assert app_logger.getEffectiveLevel() == logging.INFO
+
+        root = logging.getLogger()
+        assert root.level == logging.INFO
+        assert len(root.handlers) == 1
+        formatter = root.handlers[0].formatter
+        assert formatter is not None
+        record = logging.LogRecord(
+            name="receipt_index.pipeline",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="ingest complete",
+            args=None,
+            exc_info=None,
+        )
+        assert formatter.format(record).endswith(
+            "INFO receipt_index.pipeline: ingest complete"
+        )
+        assert formatter.format(record) == logging.Formatter(_LOG_FORMAT).format(record)
 
 
 class TestConfigOption:

@@ -4,21 +4,55 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
+import time
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from receipt_index.models import Attachment, RawReceipt
 from receipt_index.renderer import (
+    RemoteResourceBlockedError,
+    _block_remote_requests,
     _embed_inline_images,
     _find_pdf_attachment,
     _html_to_pdf_bytes,
+    _html_to_pdf_playwright,
     _html_to_pdf_weasyprint,
+    _inline_only_url_fetcher,
+    _is_inline_url,
     _render_drive_file,
     _render_text_to_pdf,
     render_pdf,
 )
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Route
+
+# A 1x1 transparent GIF, small enough to embed inline in test fixtures.
+INLINE_GIF_DATA_URI = (
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+)
+REMOTE_IMAGE_URL = "https://example.invalid/tracker.png"
+
+
+def _chromium_available() -> bool:
+    """Report whether Playwright Chromium can be launched in this environment."""
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", ".playwright")
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            browser.close()
+        return True
+    except Exception:
+        return False
+
+
+CHROMIUM_AVAILABLE = _chromium_available()
 
 
 class TestRenderPdf:
@@ -401,3 +435,199 @@ class TestRenderPdfDriveRouting:
         )
         result = render_pdf(raw)
         assert result == b"%PDF-converted"
+
+
+class TestIsInlineUrl:
+    """Tests for the shared inline/remote URL classifier."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            INLINE_GIF_DATA_URI,
+            "data:text/plain,hello",
+            "DATA:text/plain,hello",
+            "about:blank",
+            "blob:null/2b8f0e6a",
+        ],
+    )
+    def test_inline_urls_allowed(self, url: str) -> None:
+        assert _is_inline_url(url) is True
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://example.invalid/x.png",
+            "http://example.invalid/x.png",
+            "file:///etc/passwd",
+            "ftp://example.invalid/x.png",
+            "//example.invalid/x.png",
+            "/local/x.png",
+            "x.png",
+            "",
+        ],
+    )
+    def test_remote_urls_refused(self, url: str) -> None:
+        assert _is_inline_url(url) is False
+
+
+class TestBlockRemoteRequests:
+    """Tests for the Playwright route handler."""
+
+    @staticmethod
+    def _route(url: str) -> MagicMock:
+        route = MagicMock()
+        route.request.url = url
+        return route
+
+    def test_remote_request_aborted(self) -> None:
+        route = self._route(REMOTE_IMAGE_URL)
+        _block_remote_requests(route)
+
+        route.abort.assert_called_once_with()
+        route.continue_.assert_not_called()
+
+    def test_file_url_aborted(self) -> None:
+        route = self._route("file:///etc/passwd")
+        _block_remote_requests(route)
+
+        route.abort.assert_called_once_with()
+
+    def test_inline_request_allowed(self) -> None:
+        route = self._route(INLINE_GIF_DATA_URI)
+        _block_remote_requests(route)
+
+        route.continue_.assert_called_once_with()
+        route.abort.assert_not_called()
+
+    def test_about_blank_allowed(self) -> None:
+        route = self._route("about:blank")
+        _block_remote_requests(route)
+
+        route.continue_.assert_called_once_with()
+        route.abort.assert_not_called()
+
+
+class TestInlineOnlyUrlFetcher:
+    """Tests for the weasyprint URL fetcher."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            REMOTE_IMAGE_URL,
+            "http://example.invalid/x.png",
+            "file:///etc/passwd",
+            "/local/x.png",
+        ],
+    )
+    def test_remote_url_refused(self, url: str) -> None:
+        with pytest.raises(RemoteResourceBlockedError, match="Remote resource blocked"):
+            _inline_only_url_fetcher(url)
+
+    def test_data_uri_served(self) -> None:
+        payload = b"inline-bytes"
+        b64 = base64.b64encode(payload).decode("ascii")
+        response = _inline_only_url_fetcher(
+            f"data:application/octet-stream;base64,{b64}"
+        )
+
+        assert response.read() == payload
+
+
+class TestWeasyprintEgressBlocking:
+    """Rendering with the weasyprint engine must not fetch remote resources."""
+
+    @pytest.fixture(autouse=True)
+    def _suppress_weasyprint_warnings(self, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(logging.CRITICAL, logger="weasyprint")
+
+    def test_remote_image_blocked_render_succeeds(self) -> None:
+        html_content = (
+            f'<html><body><p>Total: $42.99</p><img src="{REMOTE_IMAGE_URL}">'
+            "</body></html>"
+        )
+        result = _html_to_pdf_weasyprint(html_content)
+
+        assert result[:5] == b"%PDF-"
+        assert len(result) > 500
+
+    def test_remote_stylesheet_blocked_render_succeeds(self) -> None:
+        html_content = (
+            '<html><head><link rel="stylesheet" '
+            'href="https://example.invalid/style.css"></head>'
+            "<body><p>Total: $42.99</p></body></html>"
+        )
+        result = _html_to_pdf_weasyprint(html_content)
+
+        assert result[:5] == b"%PDF-"
+
+    def test_fetcher_is_wired_into_render(self) -> None:
+        requested: list[str] = []
+
+        def spy(url: str) -> object:
+            requested.append(url)
+            # Call the module-level import, not renderer._inline_only_url_fetcher —
+            # the latter is patched to this spy and would recurse.
+            return _inline_only_url_fetcher(url)
+
+        html_content = f'<html><body><img src="{REMOTE_IMAGE_URL}"></body></html>'
+        with patch("receipt_index.renderer._inline_only_url_fetcher", spy):
+            result = _html_to_pdf_weasyprint(html_content)
+
+        assert result[:5] == b"%PDF-"
+        assert REMOTE_IMAGE_URL in requested
+
+    def test_text_body_render_produces_pdf(self) -> None:
+        raw = RawReceipt(
+            source_id="test",
+            source_name="test-source",
+            source_type="imap",
+            subject="Text Receipt",
+            sender="shop@example.com",
+            date=datetime(2025, 1, 1, tzinfo=UTC),
+            text_body="Your total: $42.99",
+        )
+        result = _render_text_to_pdf(raw)
+
+        assert result[:5] == b"%PDF-"
+        assert len(result) > 500
+
+
+@pytest.mark.skipif(
+    not CHROMIUM_AVAILABLE,
+    reason="Playwright Chromium not installed",
+)
+class TestPlaywrightEgressBlocking:
+    """Rendering with real Chromium must not fetch remote resources."""
+
+    def test_inline_only_html_renders(self) -> None:
+        html_content = (
+            f'<html><body><p>Total: $42.99</p><img src="{INLINE_GIF_DATA_URI}">'
+            "</body></html>"
+        )
+        result = _html_to_pdf_playwright(html_content)
+
+        assert result[:5] == b"%PDF-"
+        assert len(result) > 500
+
+    def test_remote_image_blocked_render_completes(self) -> None:
+        seen: list[str] = []
+
+        def spy(route: Route) -> None:
+            seen.append(route.request.url)
+            # Call the module-level import, not renderer._block_remote_requests —
+            # the latter is patched to this spy and would recurse.
+            _block_remote_requests(route)
+
+        html_content = (
+            f'<html><body><p>Total: $42.99</p><img src="{REMOTE_IMAGE_URL}">'
+            "</body></html>"
+        )
+        started = time.monotonic()
+        with patch("receipt_index.renderer._block_remote_requests", spy):
+            result = _html_to_pdf_playwright(html_content)
+        elapsed = time.monotonic() - started
+
+        assert result[:5] == b"%PDF-"
+        assert REMOTE_IMAGE_URL in seen, "request never reached the route handler"
+        # Blocked != timeout: aborts are immediate, so the render stays fast.
+        assert elapsed < 30

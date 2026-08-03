@@ -14,8 +14,11 @@ htmlcov/
 .coverage
 .env
 data/
+deploy/
 docs/
 tests/
 *.md
+# hatchling requires the readme to build the package (pyproject readme field)
+!README.md
 .DS_Store
 Thumbs.db

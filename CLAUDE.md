@@ -24,6 +24,7 @@ Key standards applied:
 - Product spec: `docs/product/features/receipt-search-index-spec.md`
 - Technical design: `docs/engineering/designs/receipt-search-index.md`
 - ADRs: `docs/engineering/adr/`
+- Server deployment (production compose): `docs/user/server-deployment.md` + `deploy/`
 
 ## Local Devtest Setup
 

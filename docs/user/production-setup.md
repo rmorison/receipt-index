@@ -1,5 +1,9 @@
 # Production Setup
 
+> **Superseded for this project.** The native-PostgreSQL setup below is how receipt-index ran on the dev machine before it moved to the always-on Docker service. That deployment — compose-managed Postgres, scheduled ingest, Dropbox mirror, and the one-time cutover off this native cluster — is documented in **[Server Deployment](server-deployment.md)**, which is now the canonical operations document.
+>
+> This page remains valid if you want a host-based install with your own PostgreSQL server.
+
 Run Receipt Search Index against a native PostgreSQL 18 server instead of Docker. This is suitable for a host-based deployment where you want to ingest and search your full set of receipts.
 
 ## 1. Install PostgreSQL 18

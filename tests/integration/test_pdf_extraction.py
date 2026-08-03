@@ -7,7 +7,7 @@ import os
 import pytest
 import weasyprint
 
-from receipt_index.pdf_reader import extract_text
+from receipt_index.pdf_reader import create_vision_agent, extract_text
 
 
 class TestPdfTextExtraction:
@@ -70,7 +70,8 @@ class TestPdfVisionFallback:
         """
         pdf_bytes = weasyprint.HTML(string=html).write_pdf()
 
-        result = extract_text(pdf_bytes)
+        agent = create_vision_agent(api_key=os.environ["ANTHROPIC_API_KEY"])
+        result = extract_text(pdf_bytes, vision_agent=agent)
 
         # Vision should extract the text from the rendered image
         assert "75.00" in result or "75" in result
