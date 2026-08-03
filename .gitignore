@@ -23,9 +23,15 @@ env/
 # Environment and config
 .env
 receipt-index.yaml
+# ...but the server config in deploy/ holds no secrets (only ${VAR} refs) and
+# is version-controlled. The bare pattern above matches at any depth.
+!deploy/example.receipt-index.yaml
 
 # Data
 data/
+
+# Server-side rclone config directory (contains live Dropbox OAuth tokens)
+rclone-config/
 
 # Coverage
 htmlcov/

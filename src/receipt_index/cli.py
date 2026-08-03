@@ -25,6 +25,33 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+# Third-party loggers that emit per-page/per-glyph records at DEBUG/INFO and
+# drown out application logs (notably in container output).
+_NOISY_LIBRARY_LOGGERS = ("pdfminer", "fontTools", "PIL")
+
+
+def _configure_logging(config: AppConfig) -> None:
+    """Configure application logging and quiet noisy third-party libraries.
+
+    The noisy library loggers are always clamped to WARNING, even when the
+    application level is DEBUG. Debugging those libraries requires raising
+    their level explicitly.
+
+    Args:
+        config: Loaded application configuration.
+    """
+    # force=True: reconfigure deterministically even if a handler was already
+    # installed on the root logger (e.g. by an embedding process or test runner).
+    logging.basicConfig(
+        level=getattr(logging, config.logging.level, logging.INFO),
+        format=_LOG_FORMAT,
+        force=True,
+    )
+    for name in _NOISY_LIBRARY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
 
 def _load_config_or_exit(ctx: click.Context) -> AppConfig:
     """Load AppConfig from Click context, exiting with a clear message on error."""
@@ -78,11 +105,7 @@ def ingest(
 
     config = _load_config_or_exit(ctx)
 
-    # Configure logging from config
-    logging.basicConfig(
-        level=getattr(logging, config.logging.level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    _configure_logging(config)
 
     # Filter sources if --source is specified
     sources = config.sources
@@ -216,10 +239,7 @@ def search(
 
     config = _load_config_or_exit(ctx)
 
-    logging.basicConfig(
-        level=getattr(logging, config.logging.level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    _configure_logging(config)
 
     if amount is not None and (amount_min is not None or amount_max is not None):
         raise click.UsageError(
@@ -289,10 +309,7 @@ def failures(ctx: click.Context, output_format: str) -> None:
 
     config = _load_config_or_exit(ctx)
 
-    logging.basicConfig(
-        level=getattr(logging, config.logging.level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    _configure_logging(config)
 
     with get_connection(config.database.url) as conn:
         results = get_ingest_failures(conn)
@@ -334,10 +351,7 @@ def show(ctx: click.Context, receipt_id: str, output_format: str) -> None:
 
     config = _load_config_or_exit(ctx)
 
-    logging.basicConfig(
-        level=getattr(logging, config.logging.level, logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    _configure_logging(config)
 
     try:
         uid = UUID(receipt_id)
