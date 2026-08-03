@@ -35,7 +35,7 @@ Each source is a named entry with a `type` discriminator:
 sources:
   - name: personal-email
     type: imap
-    host: mail.morison.io
+    host: mail.example.com
     password: ${IMAP_PASSWORD}
     # ...
 
@@ -61,7 +61,7 @@ Phase 2 is a clean break. The Phase 1 env var config helpers are removed. If no 
 - **Self-documenting**: The config file describes the full source topology in one place.
 - **Version-controllable**: Config files (minus secrets) can be committed alongside the project.
 - **Typed validation**: Pydantic discriminated union validates config at load time, catching errors early.
-- **CLI ergonomics**: `--source personal-email` is clearer than `--imap-host mail.morison.io`.
+- **CLI ergonomics**: `--source personal-email` is clearer than `--imap-host mail.example.com`.
 
 ### Negative
 

@@ -68,9 +68,9 @@ Search order (first found wins):
 sources:
   - name: personal-email
     type: imap
-    host: mail.morison.io
+    host: mail.example.com
     port: 993
-    username: rod@morison.io
+    username: user@example.com
     password: ${IMAP_PASSWORD}           # env var interpolation
     folder: INBOX.Receipts
     use_ssl: true                        # default: true
